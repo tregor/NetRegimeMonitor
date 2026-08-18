@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="popup.css">
+  <title>Монитор Сетевых Режимов</title>
+</head>
+<body>
+<main>
+  <header>
+    <div class="header-titles">
+      <h1>Монитор сети</h1>
+      <div id="last-check-sub" class="last-check-sub"></div>
+    </div>
+    <div class="header-status-badge" id="status-timing" title="Загрузка…">
+      <div class="ring-wrap">
+        <svg class="ring-svg" width="24" height="24" viewBox="0 0 24 24">
+          <circle id="ring-circle" class="ring-circle" cx="12" cy="12" r="9"/>
+        </svg>
+        <span id="dot" class="dot"></span>
+      </div>
+    </div>
+  </header>
+
+  <section class="status-card">
+    <div class="status-card-header">
+      <span class="status-label-title">Текущий статус</span>
+    </div>
+    <div id="state" class="state">Проверка доступности…</div>
+  </section>
+
+  <button id="check" class="primary">
+    <span class="btn-spinner" id="btn-spinner" style="display: none;"></span>
+    <span class="btn-text">Проверить сейчас</span>
+  </button>
+
+  <section class="groups">
+    <h2>Проверка контрольных групп</h2>
+    <div id="groups"></div>
+  </section>
+
+  <details class="settings-details">
+    <summary>Настройки мониторинга</summary>
+    <div class="settings-content">
+      <div class="setting-block">
+        <span class="setting-title">Интервал автопроверки</span>
+        <div class="slider-group">
+          <input type="range" id="interval-slider" class="slider" min="0" max="7" step="1" value="2">
+          <div class="slider-scale" id="interval-scale">
+            <span>1</span><span>2</span><span>3</span><span>5</span><span>10</span><span>15</span><span>20</span><span>30</span>
+          </div>
+          <div class="slider-value"><span id="interval-value" class="slider-current">5</span> мин</div>
+        </div>
+      </div>
+
+      <div class="setting-block">
+        <span class="setting-title">Таймаут соединения</span>
+        <div class="slider-group">
+          <input type="range" id="timeout-slider" class="slider" min="0" max="5" step="1" value="2">
+          <div class="slider-scale" id="timeout-scale">
+            <span>1</span><span>3</span><span>5</span><span>10</span><span>20</span><span>30</span>
+          </div>
+          <div class="slider-value"><span id="timeout-value" class="slider-current">5</span> сек</div>
+        </div>
+      </div>
+
+      <label class="toggle">
+        <input id="notifications" type="checkbox"> Уведомлять при изменении статуса
+      </label>
+      <button id="save" class="secondary">Сохранить настройки</button>
+    </div>
+  </details>
+
+  <footer class="footer-note">
+    <p>Оценка доступности на основе прямого опроса узлов. Не является официальной диагностикой провайдера.</p>
+  </footer>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>
