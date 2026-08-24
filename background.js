@@ -151,11 +151,20 @@ function any(results) { return results.some(x => x.ok); }
 
 function classify(groups) {
   const allResults = [...groups.ru, ...groups.global, ...groups.restricted];
-  const totalOk = allResults.filter(x => x.ok).length;
-  const allTimeouts = allResults.every(x => x.error === 'Таймаут' || (!x.ok && !x.status));
+  const finishedResults = allResults.filter(x => !x.loading);
 
-  // Если вообще ни один сайт не ответил успехом
+  if (finishedResults.length === 0) {
+    return { code: 'CHECKING', label: 'Проверка доступности…', color: '#3b82f6' };
+  }
+
+  const totalOk = allResults.filter(x => x.ok).length;
+  const allTimeouts = finishedResults.length > 0 && finishedResults.every(x => x.error === 'Таймаут' || (!x.ok && !x.status));
+
+  // Если вообще ни один завершенный сайт не ответил успехом
   if (totalOk === 0) {
+    if (finishedResults.length < allResults.length) {
+      return { code: 'CHECKING', label: 'Проверка доступности…', color: '#3b82f6' };
+    }
     if (allTimeouts) {
       return { code: 'OUTAGE', label: 'Высокая задержка / таймауты сети', color: '#f59e0b' };
     }
@@ -174,19 +183,9 @@ function classify(groups) {
   const globalAny = globalOk > 0;
   const restrictedAny = restrictedOk > 0;
 
-  // Частичная доступность (мало доступных сайтов)
-  if (totalOk > 0 && totalOk < 4) {
-    return { code: 'MIXED', label: 'Частичная доступность / деградация сети', color: '#f97316' };
-  }
-
-  // Доступны заблокированные в РФ сайты, а российские — нет
   if (!ruAny && (globalAny || restrictedAny)) return { code: 'FOREIGN', label: 'Зарубежный доступ в интернет РФ', color: '#8b5cf6' };
-
-  // Российские доступны, а зарубежные нет — белые списки
   if (ruAny && !globalAny) return { code: 'ALLOWLIST', label: 'Ограничения (белые списки / фильтрация)', color: '#f59e0b' };
-
   if (ruAny && globalAny && !restrictedAny) return { code: 'FILTERED', label: 'Селективная блокировка зарубежных сервисов', color: '#f97316' };
-
   if (ruAny && globalAny && restrictedAny) return { code: 'OPEN', label: 'Свободный доступ к сети', color: '#10b981' };
 
   return { code: 'MIXED', label: 'Смешанный или нестабильный режим', color: '#64748b' };
