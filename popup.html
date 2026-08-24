@@ -65,6 +65,23 @@
         </div>
       </div>
 
+      <div class="setting-block">
+        <span class="setting-title">Пользовательские сайты</span>
+        <div class="slider-group custom-sites-manager">
+          <div class="custom-site-form">
+            <input type="text" id="custom-name" placeholder="Название (например, Мой сайт)" class="setting-input">
+            <input type="text" id="custom-url" placeholder="URL (например, https://example.com/)" class="setting-input">
+            <select id="custom-group" class="setting-select">
+              <option value="ru">Российские сервисы</option>
+              <option value="global">Нейтральные зарубежные</option>
+              <option value="restricted">Ограниченные ресурсы (ЧС)</option>
+            </select>
+            <button id="add-custom-site" class="secondary" style="margin-top:4px;">Добавить сайт</button>
+          </div>
+          <div id="custom-sites-list" class="custom-sites-list"></div>
+        </div>
+      </div>
+
       <label class="toggle">
         <input id="notifications" type="checkbox"> Уведомлять при изменении статуса
       </label>

@@ -62,6 +62,28 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
     saveSettings(message.settings).then(sendResponse);
     return true;
   }
+  if (message.type === 'get-custom-sites') {
+    chrome.storage.local.get(['customSites']).then(d => sendResponse(d.customSites || []));
+    return true;
+  }
+  if (message.type === 'add-custom-site') {
+    chrome.storage.local.get(['customSites']).then(async d => {
+      const list = d.customSites || [];
+      const newSite = { id: 'custom_' + Date.now(), name: message.site.name, url: message.site.url, group: message.site.group };
+      list.push(newSite);
+      await chrome.storage.local.set({ customSites: list });
+      sendResponse({ ok: true, customSites: list });
+    });
+    return true;
+  }
+  if (message.type === 'remove-custom-site') {
+    chrome.storage.local.get(['customSites']).then(async d => {
+      const list = (d.customSites || []).filter(x => x.id !== message.id);
+      await chrome.storage.local.set({ customSites: list });
+      sendResponse({ ok: true, customSites: list });
+    });
+    return true;
+  }
 });
 
 async function settings() {
@@ -181,6 +203,22 @@ function broadcastUpdate(record) {
   chrome.runtime.sendMessage({ type: 'check-updated', record }).catch(() => {});
 }
 
+async function getActiveGroups() {
+  const data = await chrome.storage.local.get(['customSites']);
+  const customSites = data.customSites || [];
+  const groups = {
+    ru: [...GROUPS.ru],
+    global: [...GROUPS.global],
+    restricted: [...GROUPS.restricted]
+  };
+  for (const site of customSites) {
+    const targetGroup = groups[site.group] ? site.group : 'ru';
+    if (!groups[targetGroup]) groups[targetGroup] = [];
+    groups[targetGroup].push([site.name, site.url]);
+  }
+  return groups;
+}
+
 async function runCheck(isManual = false) {
   if (currentAbortController) {
     try { currentAbortController.abort(); } catch (e) {}
@@ -188,11 +226,12 @@ async function runCheck(isManual = false) {
   currentAbortController = new AbortController();
   const signal = currentAbortController.signal;
   const s = await settings();
+  const activeGroups = await getActiveGroups();
 
   const groupsData = {
-    ru: GROUPS.ru.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true })),
-    global: GROUPS.global.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true })),
-    restricted: GROUPS.restricted.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true }))
+    ru: activeGroups.ru.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true })),
+    global: activeGroups.global.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true })),
+    restricted: activeGroups.restricted.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true }))
   };
 
   const now = Date.now();
@@ -229,7 +268,7 @@ async function runCheck(isManual = false) {
 
   const promises = [];
   ['ru', 'global', 'restricted'].forEach(groupKey => {
-    GROUPS[groupKey].forEach(([name, url], index) => {
+    activeGroups[groupKey].forEach(([name, url], index) => {
       const p = probe(name, url, signal, s.timeoutSeconds * 1000, (res) => {
         handleProbeComplete(groupKey, index, res);
       });
@@ -240,7 +279,8 @@ async function runCheck(isManual = false) {
   await Promise.allSettled(promises);
 
   if (signal.aborted) {
-    throw new Error('Aborted');
+    const record = { at: now, candidate: classify(groupsData), stable: old.stableState, groups: groupsData, intervalMinutes: s.intervalMinutes };
+    return record;
   }
 
   const candidate = classify(groupsData);

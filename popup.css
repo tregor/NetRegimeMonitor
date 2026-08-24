@@ -328,3 +328,79 @@ summary:hover{
   color:#64748b;
   line-height:1.4;
 }
+
+.setting-input, .setting-select {
+  width: 100%;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #f8fafc;
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  outline: none;
+}
+.setting-input:focus, .setting-select:focus {
+  border-color: #3b82f6;
+}
+.custom-site-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.custom-sites-list {
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  border-top: 1px solid #334155;
+  padding-top: 6px;
+}
+.custom-site-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #162032;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.custom-site-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 8px;
+}
+.custom-site-title {
+  color: #f8fafc;
+  font-weight: 600;
+}
+.custom-site-url {
+  color: #64748b;
+  font-size: 10px;
+}
+.custom-site-delete {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.custom-site-delete:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-radius: 4px;
+}
+.empty-custom-sites {
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+  padding: 6px;
+}

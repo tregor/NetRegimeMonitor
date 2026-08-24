@@ -170,7 +170,86 @@ async function load() {
 
   $('#notifications').checked = d.notifications ?? true;
   render(d.lastCheck || null);
+  await loadCustomSites();
 }
+
+async function loadCustomSites() {
+  const res = await chrome.runtime.sendMessage({ type: 'get-custom-sites' });
+  renderCustomSites(res || []);
+}
+
+function renderCustomSites(sites) {
+  const listEl = $('#custom-sites-list');
+  if (!listEl) return;
+  if (!sites || sites.length === 0) {
+    listEl.innerHTML = '<div class="empty-custom-sites">Нет добавленных сайтов</div>';
+    return;
+  }
+  const groupNames = { ru: 'Российские', global: 'Зарубежные', restricted: 'ЧС' };
+  let html = '';
+  for (const s of sites) {
+    const gName = groupNames[s.group] || s.group;
+    html += `<div class="custom-site-item">
+      <div class="custom-site-info">
+        <span class="custom-site-title">${s.name} (${gName})</span>
+        <span class="custom-site-url">${s.url}</span>
+      </div>
+      <button class="custom-site-delete" data-id="${s.id}" title="Удалить">×</button>
+    </div>`;
+  }
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll('.custom-site-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      const res = await chrome.runtime.sendMessage({ type: 'remove-custom-site', id });
+      renderCustomSites(res.customSites || []);
+      setChecking(true);
+      try {
+        const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
+        setChecking(false);
+        render(checkRes);
+      } catch (e) {
+        setChecking(false);
+      }
+    });
+  });
+}
+
+$('#add-custom-site').addEventListener('click', async () => {
+  const nameInput = $('#custom-name');
+  const urlInput = $('#custom-url');
+  const groupSelect = $('#custom-group');
+  const name = nameInput.value.trim();
+  let url = urlInput.value.trim();
+  const group = groupSelect.value;
+
+  if (!name || !url) {
+    alert('Пожалуйста, введите название и URL сайта');
+    return;
+  }
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+
+  const res = await chrome.runtime.sendMessage({
+    type: 'add-custom-site',
+    site: { name, url, group }
+  });
+
+  nameInput.value = '';
+  urlInput.value = '';
+  renderCustomSites(res.customSites || []);
+
+  setChecking(true);
+  try {
+    const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
+    setChecking(false);
+    render(checkRes);
+  } catch (e) {
+    setChecking(false);
+  }
+});
 
 $('#check').addEventListener('click', async () => {
   const btn = $('#check');

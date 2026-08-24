@@ -9,25 +9,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "https://ya.ru/*",
-    "https://yandex.ru/*",
-    "https://vk.com/*",
-    "https://www.gosuslugi.ru/*",
-    "https://mail.ru/*",
-    "https://lenta.ru/*",
-    "https://habr.com/*",
-    "https://example.com/*",
-    "https://www.cloudflare.com/*",
-    "https://www.wikipedia.org/*",
-    "https://www.google.com/*",
-    "https://1.1.1.1/*",
-    "https://github.com/*",
-    "https://www.instagram.com/*",
-    "https://www.facebook.com/*",
-    "https://x.com/*",
-    "https://www.youtube.com/*",
-    "https://discord.com/*",
-    "https://telegram.org/*"
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js",
