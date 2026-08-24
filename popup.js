@@ -174,8 +174,8 @@ async function load() {
 }
 
 async function loadCustomSites() {
-  const res = await chrome.runtime.sendMessage({ type: 'get-custom-sites' });
-  renderCustomSites(res || []);
+  const data = await chrome.storage.local.get(['customSites']);
+  renderCustomSites(data.customSites || []);
 }
 
 function renderCustomSites(sites) {
@@ -202,8 +202,11 @@ function renderCustomSites(sites) {
   listEl.querySelectorAll('.custom-site-delete').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
-      const res = await chrome.runtime.sendMessage({ type: 'remove-custom-site', id });
-      renderCustomSites(res.customSites || []);
+      const data = await chrome.storage.local.get(['customSites']);
+      const list = (data.customSites || []).filter(x => x.id !== id);
+      await chrome.storage.local.set({ customSites: list });
+      renderCustomSites(list);
+
       setChecking(true);
       try {
         const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
@@ -232,14 +235,15 @@ $('#add-custom-site').addEventListener('click', async () => {
     url = 'https://' + url;
   }
 
-  const res = await chrome.runtime.sendMessage({
-    type: 'add-custom-site',
-    site: { name, url, group }
-  });
+  const data = await chrome.storage.local.get(['customSites']);
+  const list = data.customSites || [];
+  const newSite = { id: 'custom_' + Date.now(), name, url, group };
+  list.push(newSite);
+  await chrome.storage.local.set({ customSites: list });
 
   nameInput.value = '';
   urlInput.value = '';
-  renderCustomSites(res.customSites || []);
+  renderCustomSites(list);
 
   setChecking(true);
   try {
