@@ -204,12 +204,13 @@ function broadcastUpdate(record) {
 }
 
 async function getActiveGroups() {
-  const data = await chrome.storage.local.get(['customSites']);
+  const data = await chrome.storage.local.get(['customSites', 'disabledDefaultSites']);
   const customSites = data.customSites || [];
+  const disabledDefaults = data.disabledDefaultSites || [];
   const groups = {
-    ru: [...GROUPS.ru],
-    global: [...GROUPS.global],
-    restricted: [...GROUPS.restricted]
+    ru: GROUPS.ru.filter(([name, url]) => !disabledDefaults.includes(url)),
+    global: GROUPS.global.filter(([name, url]) => !disabledDefaults.includes(url)),
+    restricted: GROUPS.restricted.filter(([name, url]) => !disabledDefaults.includes(url))
   };
   for (const site of customSites) {
     const targetGroup = groups[site.group] ? site.group : 'ru';

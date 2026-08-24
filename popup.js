@@ -57,7 +57,6 @@ function updateRing(record) {
   const pastText = elapsedSec < 60 ? `Проверено ${elapsedSec} сек. назад` : `Проверено ${Math.round(elapsedSec/60)} мин. назад`;
   const nextText = `До след. проверки ${remainingSec} сек.`;
   const tooltip = `${pastText} · ${nextText}`;
-  // Обновляем tooltip только при изменении значения, чтобы не сбрасывать наведение
   if (tooltip !== lastTooltip) {
     $('#status-timing').title = tooltip;
     lastTooltip = tooltip;
@@ -89,7 +88,14 @@ function renderGroups(record) {
     const results = record.groups[groupKey];
     if (!results) continue;
     const groupTitle = GROUP_TITLES[groupKey] || groupKey;
-    html += `<div class="group-section"><h3>${groupTitle}</h3>`;
+    html += `<div class="group-section" data-group="${groupKey}">
+      <div class="group-header-row">
+        <h3>${groupTitle}</h3>
+        <button class="add-site-trigger" data-group="${groupKey}" title="Добавить сайт">+</button>
+      </div>
+      <div class="group-form-container"></div>
+      <div class="group-items-list">`;
+
     const sortedResults = [...results].sort((a, b) => a.name.localeCompare(b.name));
     for (const x of sortedResults) {
       let statusText = '';
@@ -104,18 +110,116 @@ function renderGroups(record) {
         statusText = `<span class="badge-error">${x.error || 'Ошибка'}</span>`;
         markColor = '#ef4444';
       }
-      html += `<div class="row"><span class="mark" style="background:${markColor}"></span><span class="name">${x.name}</span><span class="meta">${statusText}</span></div>`;
+      html += `<div class="row">
+        <span class="mark" style="background:${markColor}"></span>
+        <span class="name">${x.name}</span>
+        <span class="meta">${statusText}</span>
+        <button class="row-delete" data-name="${encodeURIComponent(x.name)}" data-url="${encodeURIComponent(x.url)}" title="Удалить сайт">×</button>
+      </div>`;
     }
-    html += `</div>`;
+    html += `</div></div>`;
   }
   $('#groups').innerHTML = html || '<div class="empty-groups">Нажмите «Проверить сейчас» для начала диагностики</div>';
+
+  attachGroupInteractions();
+}
+
+function attachGroupInteractions() {
+  const groupsEl = $('#groups');
+  if (!groupsEl) return;
+
+  groupsEl.querySelectorAll('.add-site-trigger').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const groupKey = btn.getAttribute('data-group');
+      const sectionEl = btn.closest('.group-section');
+      const formContainer = sectionEl.querySelector('.group-form-container');
+      if (formContainer.innerHTML.trim() !== '') {
+        formContainer.innerHTML = '';
+        return;
+      }
+      formContainer.innerHTML = `
+        <div class="group-add-form">
+          <input type="text" class="new-site-name" placeholder="Название (например, Мой сайт)">
+          <input type="text" class="new-site-url" placeholder="URL (например, https://example.com/)">
+          <div class="group-form-actions">
+            <button class="group-form-btn primary-btn submit-add">Добавить</button>
+            <button class="group-form-btn cancel-btn cancel-add">Отмена</button>
+          </div>
+        </div>
+      `;
+
+      formContainer.querySelector('.cancel-add').addEventListener('click', () => {
+        formContainer.innerHTML = '';
+      });
+
+      formContainer.querySelector('.submit-add').addEventListener('click', async () => {
+        const nameInput = formContainer.querySelector('.new-site-name');
+        const urlInput = formContainer.querySelector('.new-site-url');
+        const name = nameInput.value.trim();
+        let url = urlInput.value.trim();
+        if (!name || !url) {
+          alert('Введите название и URL');
+          return;
+        }
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
+        }
+
+        const data = await chrome.storage.local.get(['customSites']);
+        const customSites = data.customSites || [];
+        const newSite = { id: 'custom_' + Date.now(), name, url, group: groupKey };
+        customSites.push(newSite);
+        await chrome.storage.local.set({ customSites });
+
+        formContainer.innerHTML = '';
+        setChecking(true);
+        try {
+          const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
+          setChecking(false);
+          render(checkRes);
+        } catch (e) {
+          setChecking(false);
+        }
+      });
+    });
+  });
+
+  groupsEl.querySelectorAll('.row-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = decodeURIComponent(btn.getAttribute('data-name'));
+      const url = decodeURIComponent(btn.getAttribute('data-url'));
+
+      const data = await chrome.storage.local.get(['customSites', 'disabledDefaultSites']);
+      const customSites = data.customSites || [];
+      const disabledDefaults = data.disabledDefaultSites || [];
+
+      const customIdx = customSites.findIndex(s => s.url === url || s.name === name);
+      if (customIdx >= 0) {
+        customSites.splice(customIdx, 1);
+        await chrome.storage.local.set({ customSites });
+      } else {
+        if (!disabledDefaults.includes(url)) {
+          disabledDefaults.push(url);
+          await chrome.storage.local.set({ disabledDefaultSites: disabledDefaults });
+        }
+      }
+
+      setChecking(true);
+      try {
+        const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
+        setChecking(false);
+        render(checkRes);
+      } catch (e) {
+        setChecking(false);
+      }
+    });
+  });
 }
 
 function render(record) {
   lastRecord = record;
   const state = record?.stable || record?.candidate;
 
-  // Текущий статус всегда показывает последний известный статус
   if (state) {
     $('#state').textContent = state.label;
     $('#state').style.color = color(state.code);
@@ -150,7 +254,6 @@ function setupSlider(id, values, valueId, current, unit, onchange) {
   slider.value = initial;
   label.textContent = values[initial];
 
-  // Подписи-минимальные значения снизу
   if (scale) {
     scale.innerHTML = values.map(v => `<span>${v}</span>`).join('');
   }
@@ -162,98 +265,34 @@ function setupSlider(id, values, valueId, current, unit, onchange) {
   });
 }
 
-async function load() {
-  const d = await chrome.storage.local.get(['lastCheck','intervalMinutes','timeoutSeconds','notifications']);
-
-  setupSlider('#interval-slider', INTERVAL_VALUES, '#interval-value', d.intervalMinutes ?? 5, 'мин');
-  setupSlider('#timeout-slider', TIMEOUT_VALUES, '#timeout-value', d.timeoutSeconds ?? 10, 'сек');
-
-  $('#notifications').checked = d.notifications ?? true;
-  render(d.lastCheck || null);
-  await loadCustomSites();
-}
-
-async function loadCustomSites() {
-  const data = await chrome.storage.local.get(['customSites']);
-  renderCustomSites(data.customSites || []);
-}
-
-function renderCustomSites(sites) {
-  const listEl = $('#custom-sites-list');
-  if (!listEl) return;
-  if (!sites || sites.length === 0) {
-    listEl.innerHTML = '<div class="empty-custom-sites">Нет добавленных сайтов</div>';
-    return;
-  }
-  const groupNames = { ru: 'Российские', global: 'Зарубежные', restricted: 'ЧС' };
-  let html = '';
-  for (const s of sites) {
-    const gName = groupNames[s.group] || s.group;
-    html += `<div class="custom-site-item">
-      <div class="custom-site-info">
-        <span class="custom-site-title">${s.name} (${gName})</span>
-        <span class="custom-site-url">${s.url}</span>
-      </div>
-      <button class="custom-site-delete" data-id="${s.id}" title="Удалить">×</button>
-    </div>`;
-  }
-  listEl.innerHTML = html;
-
-  listEl.querySelectorAll('.custom-site-delete').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-id');
-      const data = await chrome.storage.local.get(['customSites']);
-      const list = (data.customSites || []).filter(x => x.id !== id);
-      await chrome.storage.local.set({ customSites: list });
-      renderCustomSites(list);
-
-      setChecking(true);
-      try {
-        const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
-        setChecking(false);
-        render(checkRes);
-      } catch (e) {
-        setChecking(false);
-      }
-    });
+async function saveCurrentSettings() {
+  const intervalMinutes = INTERVAL_VALUES[Number($('#interval-slider').value)];
+  const timeoutSeconds = TIMEOUT_VALUES[Number($('#timeout-slider').value)];
+  const notifications = $('#notifications').checked;
+  await chrome.runtime.sendMessage({
+    type: 'save-settings',
+    settings: { intervalMinutes, timeoutSeconds, notifications }
   });
 }
 
-$('#add-custom-site').addEventListener('click', async () => {
-  const nameInput = $('#custom-name');
-  const urlInput = $('#custom-url');
-  const groupSelect = $('#custom-group');
-  const name = nameInput.value.trim();
-  let url = urlInput.value.trim();
-  const group = groupSelect.value;
+async function load() {
+  const d = await chrome.storage.local.get(['lastCheck','intervalMinutes','timeoutSeconds','notifications']);
 
-  if (!name || !url) {
-    alert('Пожалуйста, введите название и URL сайта');
-    return;
-  }
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'https://' + url;
-  }
+  setupSlider('#interval-slider', INTERVAL_VALUES, '#interval-value', d.intervalMinutes ?? 5, 'мин', async () => {
+    await saveCurrentSettings();
+  });
+  setupSlider('#timeout-slider', TIMEOUT_VALUES, '#timeout-value', d.timeoutSeconds ?? 10, 'сек', async () => {
+    await saveCurrentSettings();
+  });
 
-  const data = await chrome.storage.local.get(['customSites']);
-  const list = data.customSites || [];
-  const newSite = { id: 'custom_' + Date.now(), name, url, group };
-  list.push(newSite);
-  await chrome.storage.local.set({ customSites: list });
+  const notifCheckbox = $('#notifications');
+  notifCheckbox.checked = d.notifications ?? true;
+  notifCheckbox.addEventListener('change', async () => {
+    await saveCurrentSettings();
+  });
 
-  nameInput.value = '';
-  urlInput.value = '';
-  renderCustomSites(list);
-
-  setChecking(true);
-  try {
-    const checkRes = await chrome.runtime.sendMessage({ type: 'run-check' });
-    setChecking(false);
-    render(checkRes);
-  } catch (e) {
-    setChecking(false);
-  }
-});
+  render(d.lastCheck || null);
+}
 
 $('#check').addEventListener('click', async () => {
   const btn = $('#check');
@@ -279,17 +318,11 @@ $('#check').addEventListener('click', async () => {
 
 $('#save').addEventListener('click', async () => {
   const saveBtn = $('#save');
-  const intervalMinutes = INTERVAL_VALUES[Number($('#interval-slider').value)];
-  const timeoutSeconds = TIMEOUT_VALUES[Number($('#timeout-slider').value)];
-  await chrome.runtime.sendMessage({
-    type: 'save-settings',
-    settings: { intervalMinutes, timeoutSeconds, notifications: $('#notifications').checked }
-  });
+  await saveCurrentSettings();
   saveBtn.textContent = 'Сохранено!';
   setTimeout(() => saveBtn.textContent = 'Сохранить настройки', 1200);
 });
 
-// Обновляем интерфейс при обновлении прогресса или завершении проверки в фоне
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'check-updated' && message.record) {
     render(message.record);
@@ -301,7 +334,6 @@ chrome.runtime.onMessage.addListener(message => {
   }
 });
 
-// Синхронизация при изменении данных в фоне (например, авто-проверка по таймеру)
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.lastCheck) {
     const rec = changes.lastCheck.newValue;
