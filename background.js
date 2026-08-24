@@ -84,6 +84,23 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
     });
     return true;
   }
+  if (message.type === 'get-history') {
+    chrome.storage.local.get(['history','pingLog','lastCheck','stableState']).then(d => sendResponse({
+      history: d.history || [],
+      pingLog: d.pingLog || [],
+      lastCheck: d.lastCheck || null,
+      stableState: d.stableState || null
+    }));
+    return true;
+  }
+  if (message.type === 'clear-history') {
+    chrome.storage.local.set({ history: [], pingLog: [] }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message.type === 'export-history') {
+    chrome.storage.local.get(['history','pingLog']).then(d => sendResponse({ history: d.history||[], pingLog: d.pingLog||[] }));
+    return true;
+  }
 });
 
 async function settings() {
@@ -198,6 +215,30 @@ async function updateAction(state) {
   await chrome.action.setTitle({ title: `Net Regime Monitor: ${state.label}` });
 }
 
+function buildSiteStats(historyOrdered) {
+  const map = new Map();
+  for (const rec of historyOrdered) {
+    for (const g of ['ru','global','restricted']) {
+      for (const r of (rec.groups[g]||[])) {
+        const key = r.url;
+        if (!map.has(key)) map.set(key,{ name:r.name, url:r.url, group:g, total:0, ok:0, fail:0, latSum:0, latCount:0, lastOk:null, lastFail:null });
+        const s = map.get(key);
+        // обновляем группу если менялась
+        s.group = g;
+        s.name = r.name;
+        const isOk = !r.loading && !!r.ok;
+        const isFail = !r.loading && !r.ok;
+        if (!r.loading) {
+          s.total++;
+          if (isOk) { s.ok++; s.lastOk = rec.at; if (r.latency) { s.latSum+=r.latency; s.latCount++; } }
+          else { s.fail++; s.lastFail = rec.at; }
+        }
+      }
+    }
+  }
+  return [...map.values()].map(s=>({ ...s, uptime: s.total? (s.ok/s.total*100):0, avgLatency: s.latCount? Math.round(s.latSum/s.latCount): null }));
+}
+
 function broadcastUpdate(record) {
   chrome.runtime.sendMessage({ type: 'check-updated', record }).catch(() => {});
 }
@@ -235,7 +276,7 @@ async function runCheck(isManual = false) {
   };
 
   const now = Date.now();
-  const old = await chrome.storage.local.get(['stableState', 'candidateCode', 'candidateCount', 'history']);
+  const old = await chrome.storage.local.get(['stableState', 'candidateCode', 'candidateCount', 'history', 'pingLog']);
   
   const initialCandidate = classify(groupsData);
   const initialRecord = {
@@ -294,9 +335,22 @@ async function runCheck(isManual = false) {
   if (!old.stableState) stableState = candidate;
 
   const record = { at: now, candidate, stable: stableState, groups: groupsData, intervalMinutes: s.intervalMinutes };
-  const history = [record, ...(old.history || [])].slice(0, 100);
+  const history = [record, ...(old.history || [])].slice(0, 5000);
 
-  await chrome.storage.local.set({ stableState, candidateCode: candidate.code, candidateCount, lastCheck: record, history });
+  // --- детальный журнал пингов каждого сайта ---
+  const pingEntries = [];
+  for (const g of ['ru','global','restricted']) {
+    for (const r of groupsData[g]) {
+      pingEntries.push({ at: now, group: g, name: r.name, url: r.url, ok: !!r.ok, status: r.status, latency: r.latency||0, error: r.error||null });
+    }
+  }
+  const oldLog = old.pingLog || [];
+  // миграция старого формата если был массив записей
+  const pingLog = [...pingEntries, ...oldLog].slice(0, 80000);
+  // агрегат по последнему состоянию для быстрого доступа (не обязателен, но полезен)
+  const siteStats = buildSiteStats([...history].reverse());
+
+  await chrome.storage.local.set({ stableState, candidateCode: candidate.code, candidateCount, lastCheck: record, history, pingLog, siteStats });
   await updateAction(stableState);
 
   if (changed && s.notifications) {

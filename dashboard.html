@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Net Regime Monitor — Панель управления</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div>
+        <div class="brand-title">Net Regime Monitor</div>
+        <div class="brand-sub">Панель управления · журналирование</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-btn active" data-tab="overview">Обзор</button>
+      <button class="nav-btn" data-tab="history">Журнал пингов</button>
+      <button class="nav-btn" data-tab="sites">Сайты</button>
+      <button class="nav-btn" data-tab="correlations">Корреляции</button>
+    </nav>
+    <div class="sidebar-foot">
+      <button id="btn-refresh" class="btn ghost w100">↻ Обновить</button>
+      <button id="btn-clear" class="btn danger w100">Очистить историю</button>
+      <div class="foot-note">Хранится до 5000 проверок · до 80000 пингов</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">Дашборд доступности</h1>
+        <div id="last-check" class="sub"></div>
+      </div>
+      <div class="top-actions">
+        <span id="state-badge" class="badge">—</span>
+        <button id="btn-run" class="btn primary">Проверить сейчас</button>
+        <button id="btn-export-json" class="btn ghost">Экспорт JSON</button>
+        <button id="btn-export-csv" class="btn ghost">Экспорт CSV</button>
+        <label class="range-label">Период
+          <select id="range-select">
+            <option value="50">Последние 50</option>
+            <option value="100" selected>Последние 100</option>
+            <option value="250">Последние 250</option>
+            <option value="500">Последние 500</option>
+            <option value="1000">Последние 1000</option>
+            <option value="5000">Все (до 5000)</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <!-- OVERVIEW -->
+    <section id="tab-overview" class="tab active">
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-title">Проверок</div><div id="kpi-total" class="kpi-val">—</div><div id="kpi-total-sub" class="kpi-sub"></div></div>
+        <div class="kpi"><div class="kpi-title">RU доступность</div><div id="kpi-ru" class="kpi-val">—</div><div class="kpi-bar"><i id="kpi-ru-bar"></i></div></div>
+        <div class="kpi"><div class="kpi-title">Global доступность</div><div id="kpi-global" class="kpi-val">—</div><div class="kpi-bar"><i id="kpi-global-bar"></i></div></div>
+        <div class="kpi"><div class="kpi-title">Restricted доступность</div><div id="kpi-restricted" class="kpi-val">—</div><div class="kpi-bar"><i id="kpi-restricted-bar"></i></div></div>
+        <div class="kpi"><div class="kpi-title">Средняя задержка</div><div id="kpi-latency" class="kpi-val">—</div><div id="kpi-latency-sub" class="kpi-sub"></div></div>
+        <div class="kpi"><div class="kpi-title">Текущий режим</div><div id="kpi-state" class="kpi-val small">—</div><div id="kpi-state-sub" class="kpi-sub"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Доступность по группам во времени (%)</h3>
+          <div class="legend"><span class="lg ru"></span> RU <span class="lg global"></span> Global <span class="lg restricted"></span> Restricted</div>
+        </div>
+        <canvas id="chart-avail" width="1100" height="280"></canvas>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Средняя задержка по группам (мс)</h3></div>
+          <canvas id="chart-latency" width="540" height="260"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Режимы сети (распределение)</h3></div>
+          <canvas id="chart-states" width="540" height="260"></canvas>
+          <div id="states-legend" class="states-legend"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Лента проверок (heatmap)</h3><span class="hint">каждый столбец — одна проверка</span></div>
+        <canvas id="chart-heatmap" width="1100" height="140"></canvas>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="tab-history" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h3>Журнал проверок</h3>
+          <div class="filters">
+            <input id="filter-text" placeholder="Фильтр по сайту / статусу…">
+            <select id="filter-ok"><option value="">Все</option><option value="ok">Только OK (100%)</option><option value="fail">Только с FAIL</option></select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl sortable" id="tbl-history">
+            <thead><tr><th data-sort="at">Время ↕</th><th data-sort="code">Режим ↕</th><th data-sort="ru">RU ↕</th><th data-sort="global">Global ↕</th><th data-sort="restricted">Restricted ↕</th><th>Детали</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- SITES -->
+    <section id="tab-sites" class="tab">
+      <div class="card">
+        <div class="card-head"><h3>Рейтинг стабильности — все сайты</h3><span class="hint">ТОП стабильных ↑ вверху · анти-ТОП нестабильных ↓ внизу</span></div>
+        <div class="table-wrap">
+          <table class="tbl sortable" id="tbl-sites">
+            <thead><tr><th data-sort="name">Сайт ↕</th><th data-sort="group">Группа ↕</th><th data-sort="uptime">Uptime % ↕</th><th data-sort="ok">OK / Fail ↕</th><th data-sort="avg">Ср. задержка ↕</th><th data-sort="lastOk">Последний OK ↕</th><th data-sort="lastFail">Последний FAIL ↕</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>ТОП стабильных — все сайты в рейтинге</h3><span class="hint">сортировка по uptime, зелёный = стабильно</span></div>
+        <canvas id="chart-unstable" width="1100" height="600"></canvas>
+      </div>
+    </section>
+
+    <!-- CORRELATIONS -->
+    <section id="tab-correlations" class="tab">
+      <div class="card">
+        <div class="card-head"><h3>Корреляция доступности групп (Pearson r)</h3><span class="hint">1 = синхронно, −1 = противоположно, 0 = независимо</span></div>
+        <div id="corr-groups" class="corr-grid"></div>
+        <div id="corr-groups-note" class="hint" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Матрица корреляций между сайтами</h3>
+          <select id="corr-group-filter"><option value="all">Все группы</option><option value="ru">RU</option><option value="global">Global</option><option value="restricted">Restricted</option></select>
+        </div>
+        <div id="corr-matrix" class="matrix-wrap"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Интерпретация</h3></div>
+        <ul id="corr-insights" class="insights"></ul>
+      </div>
+    </section>
+
+  </main>
+</div>
+<script src="dashboard.js"></script>
+</body>
+</html>

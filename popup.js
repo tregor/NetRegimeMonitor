@@ -323,6 +323,13 @@ $('#save').addEventListener('click', async () => {
   setTimeout(() => saveBtn.textContent = 'Сохранить настройки', 1200);
 });
 
+const dashBtn = document.getElementById('open-dashboard');
+if (dashBtn) dashBtn.addEventListener('click', () => {
+  const url = chrome.runtime.getURL('dashboard.html');
+  if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
+  else window.open(url, '_blank');
+});
+
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'check-updated' && message.record) {
     render(message.record);
