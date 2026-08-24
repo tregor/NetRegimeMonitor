@@ -87,21 +87,28 @@ async function saveSettings(next) {
   return { ok: true };
 }
 
-async function probe(name, url, signal, timeoutMs) {
+async function probe(name, url, signal, timeoutMs, onComplete) {
   const started = Date.now();
   const controller = new AbortController();
   const combinedSignal = signal ? anySignal([signal, controller.signal]) : controller.signal;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let result;
   try {
     const response = await fetch(url + (url.includes('?') ? '&' : '?') + '_nrm=' + Date.now(), {
       method: 'GET', cache: 'no-store', redirect: 'follow', signal: combinedSignal
     });
-    return { name, url, ok: response.status >= 200 && response.status < 500, status: response.status, latency: Date.now() - started, error: null };
+    const latency = Date.now() - started;
+    const ok = response.status >= 200 && response.status < 500;
+    result = { name, url, ok, status: response.status, latency, error: ok ? null : `${response.status}` };
   } catch (e) {
-    return { name, url, ok: false, status: null, latency: Date.now() - started, error: e.name === 'AbortError' ? 'timeout' : 'network_error' };
+    const latency = Date.now() - started;
+    const isTimeout = e.name === 'AbortError' || e.message?.includes('aborted');
+    result = { name, url, ok: false, status: null, latency, error: isTimeout ? 'Таймаут' : 'Ошибка сети' };
   } finally {
     clearTimeout(timer);
+    if (onComplete) onComplete(result);
   }
+  return result;
 }
 
 function anySignal(signals) {
@@ -116,10 +123,6 @@ function anySignal(signals) {
   return controller.signal;
 }
 
-async function probeGroup(items, signal, timeoutMs) {
-  return Promise.all(items.map(([name, url]) => probe(name, url, signal, timeoutMs)));
-}
-
 function none(results) { return results.every(x => !x.ok); }
 function all(results) { return results.every(x => x.ok); }
 function any(results) { return results.some(x => x.ok); }
@@ -127,18 +130,37 @@ function any(results) { return results.some(x => x.ok); }
 function classify(groups) {
   const allResults = [...groups.ru, ...groups.global, ...groups.restricted];
   const totalOk = allResults.filter(x => x.ok).length;
+  const allTimeouts = allResults.every(x => x.error === 'Таймаут' || (!x.ok && !x.status));
 
-  // Полный обрыв сети — только когда нет ни одного доступного сайта
-  if (totalOk === 0) return { code: 'OUTAGE', label: 'Нет сети / вероятный blackout', color: '#ef4444' };
+  // Если вообще ни один сайт не ответил успехом
+  if (totalOk === 0) {
+    if (allTimeouts) {
+      return { code: 'OUTAGE', label: 'Высокая задержка / таймауты сети', color: '#f59e0b' };
+    }
+    return { code: 'OUTAGE', label: 'Нет сети / вероятный blackout', color: '#ef4444' };
+  }
 
-  const ruNone = none(groups.ru), ruAny = any(groups.ru);
-  const globalAny = any(groups.global);
-  const restrictedAny = any(groups.restricted);
+  const ruResults = groups.ru;
+  const globalResults = groups.global;
+  const restrictedResults = groups.restricted;
+
+  const ruOk = ruResults.filter(x => x.ok).length;
+  const globalOk = globalResults.filter(x => x.ok).length;
+  const restrictedOk = restrictedResults.filter(x => x.ok).length;
+
+  const ruAny = ruOk > 0;
+  const globalAny = globalOk > 0;
+  const restrictedAny = restrictedOk > 0;
+
+  // Частичная доступность (мало доступных сайтов)
+  if (totalOk > 0 && totalOk < 4) {
+    return { code: 'MIXED', label: 'Частичная доступность / деградация сети', color: '#f97316' };
+  }
 
   // Доступны заблокированные в РФ сайты, а российские — нет
-  if (!ruAny && restrictedAny) return { code: 'FOREIGN', label: 'Зарубежный доступ в интернет РФ', color: '#8b5cf6' };
+  if (!ruAny && (globalAny || restrictedAny)) return { code: 'FOREIGN', label: 'Зарубежный доступ в интернет РФ', color: '#8b5cf6' };
 
-  // Российские доступны (полностью или частично), а зарубежные нет — белые списки
+  // Российские доступны, а зарубежные нет — белые списки
   if (ruAny && !globalAny) return { code: 'ALLOWLIST', label: 'Ограничения (белые списки / фильтрация)', color: '#f59e0b' };
 
   if (ruAny && globalAny && !restrictedAny) return { code: 'FILTERED', label: 'Селективная блокировка зарубежных сервисов', color: '#f97316' };
@@ -149,10 +171,14 @@ function classify(groups) {
 }
 
 async function updateAction(state) {
-  const short = { OUTAGE:'!', ALLOWLIST:'WL', FILTERED:'BL', OPEN:'OK', MIXED:'?', FOREIGN:'F' }[state.code];
+  const short = { OUTAGE:'!', ALLOWLIST:'WL', FILTERED:'BL', OPEN:'OK', MIXED:'?', FOREIGN:'F' }[state.code] || '?';
   await chrome.action.setBadgeText({ text: short });
   await chrome.action.setBadgeBackgroundColor({ color: state.color });
   await chrome.action.setTitle({ title: `Net Regime Monitor: ${state.label}` });
+}
+
+function broadcastUpdate(record) {
+  chrome.runtime.sendMessage({ type: 'check-updated', record }).catch(() => {});
 }
 
 async function runCheck(isManual = false) {
@@ -164,17 +190,60 @@ async function runCheck(isManual = false) {
   const s = await settings();
 
   const groupsData = {
-    ru: await probeGroup(GROUPS.ru, signal, s.timeoutSeconds * 1000),
-    global: await probeGroup(GROUPS.global, signal, s.timeoutSeconds * 1000),
-    restricted: await probeGroup(GROUPS.restricted, signal, s.timeoutSeconds * 1000)
+    ru: GROUPS.ru.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true })),
+    global: GROUPS.global.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true })),
+    restricted: GROUPS.restricted.map(([name, url]) => ({ name, url, ok: false, status: null, latency: 0, error: null, loading: true }))
   };
+
+  const now = Date.now();
+  const old = await chrome.storage.local.get(['stableState', 'candidateCode', 'candidateCount', 'history']);
+  
+  const initialCandidate = classify(groupsData);
+  const initialRecord = {
+    at: now,
+    candidate: initialCandidate,
+    stable: old.stableState || initialCandidate,
+    groups: groupsData,
+    intervalMinutes: s.intervalMinutes
+  };
+
+  await chrome.storage.local.set({ lastCheck: initialRecord });
+  broadcastUpdate(initialRecord);
+
+  const handleProbeComplete = async (groupKey, index, res) => {
+    if (signal.aborted) return;
+    groupsData[groupKey][index] = { ...res, loading: false };
+
+    const candidate = classify(groupsData);
+    const currentRecord = {
+      at: now,
+      candidate,
+      stable: old.stableState || candidate,
+      groups: groupsData,
+      intervalMinutes: s.intervalMinutes
+    };
+
+    await chrome.storage.local.set({ lastCheck: currentRecord });
+    broadcastUpdate(currentRecord);
+  };
+
+  const promises = [];
+  ['ru', 'global', 'restricted'].forEach(groupKey => {
+    GROUPS[groupKey].forEach(([name, url], index) => {
+      const p = probe(name, url, signal, s.timeoutSeconds * 1000, (res) => {
+        handleProbeComplete(groupKey, index, res);
+      });
+      promises.push(p);
+    });
+  });
+
+  await Promise.allSettled(promises);
 
   if (signal.aborted) {
     throw new Error('Aborted');
   }
 
-  const candidate = classify(groupsData), now = Date.now();
-  const old = await chrome.storage.local.get(['stableState', 'candidateCode', 'candidateCount', 'history']);
+  const candidate = classify(groupsData);
   let candidateCount = old.candidateCode === candidate.code ? (old.candidateCount || 0) + 1 : 1;
   let stableState = old.stableState || candidate;
   let changed = false;
@@ -185,7 +254,7 @@ async function runCheck(isManual = false) {
   if (!old.stableState) stableState = candidate;
 
   const record = { at: now, candidate, stable: stableState, groups: groupsData, intervalMinutes: s.intervalMinutes };
-  const history = [record, ...(old.history || [])].slice(0, 80);
+  const history = [record, ...(old.history || [])].slice(0, 100);
 
   await chrome.storage.local.set({ stableState, candidateCode: candidate.code, candidateCount, lastCheck: record, history });
   await updateAction(stableState);
@@ -194,7 +263,6 @@ async function runCheck(isManual = false) {
     await chrome.notifications.create(`network-${now}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Net Regime Monitor', message: stableState.label, priority: 1 });
   }
 
-  // Сообщаем открытым всплывающим окнам о завершении проверки
-  chrome.runtime.sendMessage({ type: 'check-updated', record }).catch(() => {});
+  broadcastUpdate(record);
   return record;
 }

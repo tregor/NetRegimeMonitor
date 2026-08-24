@@ -92,10 +92,19 @@ function renderGroups(record) {
     html += `<div class="group-section"><h3>${groupTitle}</h3>`;
     const sortedResults = [...results].sort((a, b) => a.name.localeCompare(b.name));
     for (const x of sortedResults) {
-      const statusText = x.ok
-        ? `<span class="badge-success">${x.status} · ${x.latency}мс</span>`
-        : `<span class="badge-error">${x.error || 'ошибка'}</span>`;
-      html += `<div class="row"><span class="mark" style="background:${x.ok?'#10b981':'#ef4444'}"></span><span class="name">${x.name}</span><span class="meta">${statusText}</span></div>`;
+      let statusText = '';
+      let markColor = '#64748b';
+      if (x.loading) {
+        statusText = `<span class="row-loader" title="Проверка…"></span>`;
+        markColor = '#64748b';
+      } else if (x.ok) {
+        statusText = `<span class="badge-success">${x.status} · ${x.latency}мс</span>`;
+        markColor = '#10b981';
+      } else {
+        statusText = `<span class="badge-error">${x.error || 'Ошибка'}</span>`;
+        markColor = '#ef4444';
+      }
+      html += `<div class="row"><span class="mark" style="background:${markColor}"></span><span class="name">${x.name}</span><span class="meta">${statusText}</span></div>`;
     }
     html += `</div>`;
   }
@@ -197,11 +206,15 @@ $('#save').addEventListener('click', async () => {
   setTimeout(() => saveBtn.textContent = 'Сохранить настройки', 1200);
 });
 
-// Обновляем интерфейс при завершении проверки в фоне
+// Обновляем интерфейс при обновлении прогресса или завершении проверки в фоне
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'check-updated' && message.record) {
-    setChecking(false);
     render(message.record);
+    const allResults = [...(message.record.groups.ru||[]), ...(message.record.groups.global||[]), ...(message.record.groups.restricted||[])];
+    const stillLoading = allResults.some(x => x.loading);
+    if (!stillLoading) {
+      setChecking(false);
+    }
   }
 });
 
@@ -209,8 +222,17 @@ chrome.runtime.onMessage.addListener(message => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.lastCheck) {
     const rec = changes.lastCheck.newValue;
-    setChecking(false);
-    render(rec || null);
+    if (rec) {
+      render(rec);
+      const allResults = [...(rec.groups.ru||[]), ...(rec.groups.global||[]), ...(rec.groups.restricted||[])];
+      const stillLoading = allResults.some(x => x.loading);
+      if (!stillLoading) {
+        setChecking(false);
+      }
+    } else {
+      setChecking(false);
+      render(null);
+    }
   }
 });
 
