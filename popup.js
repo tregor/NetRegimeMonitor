@@ -219,7 +219,6 @@ function attachGroupInteractions() {
 function render(record) {
   lastRecord = record;
   const state = record?.stable || record?.candidate;
-
   if (state) {
     $('#state').textContent = state.label;
     $('#state').style.color = color(state.code);
@@ -233,8 +232,37 @@ function render(record) {
   $('#dot').classList.toggle('pulse', isChecking);
 
   if (record) renderGroups(record);
+  if (record && 'netInfo' in record) renderNetInfo(record.netInfo);
   renderSub();
   updateRing(record);
+}
+
+function renderNetInfo(netInfo) {
+  const box = $('#netinfo');
+  const badge = $('#netinfo-online');
+  if (!box) return;
+  // Локальные данные адаптера (без сети): navigator.connection + onLine
+  const conn = navigator.connection || {};
+  const eff = conn.effectiveType ? ` · ${conn.effectiveType}` : '';
+  const down = conn.downlink ? ` · ↓${conn.downlink} Мбит/с` : '';
+  const rtt = (conn.rtt != null) ? ` · RTT ${conn.rtt} мс` : '';
+  const localSuffix = `<div class="net-hint">Адаптер: ${navigator.onLine ? 'подключён' : 'ОТКЛЮЧЁН'}${eff}${down}${rtt}</div>`;
+  if (!netInfo) {
+    if (badge) { badge.textContent = navigator.onLine ? '…' : 'OFFLINE'; badge.className = 'net-badge'; }
+    box.innerHTML = `Сбор данных о соединении…${localSuffix}`;
+    return;
+  }
+  if (badge) {
+    badge.textContent = netInfo.online ? 'ONLINE' : 'OFFLINE';
+    badge.className = 'net-badge ' + (netInfo.online ? 'on' : 'off');
+  }
+  const ipRow = `<div class="net-row"><span class="net-key">Внешний IP</span><span class="net-val">${netInfo.publicIp || '—'}</span></div>`;
+  const locRow = `<div class="net-row"><span class="net-key">Локация / PoP</span><span class="net-val">${[netInfo.loc, netInfo.colo].filter(Boolean).join(' · ') || '—'}</span></div>`;
+  const traceRow = `<div class="net-row"><span class="net-key">До Cloudflare</span><span class="net-val ${netInfo.traceMs != null ? 'ok' : 'bad'}">${netInfo.traceMs != null ? netInfo.traceMs + ' мс' : 'недоступно'}</span></div>`;
+  const dnsRows = (netInfo.dns || []).map(d =>
+    `<div class="net-row"><span class="net-key">${d.name} <span style="color:#64748b">${d.target}</span></span><span class="net-val ${d.ok ? 'ok' : 'bad'}">${d.ok ? d.ms + ' мс' : 'FAIL ' + d.ms + ' мс'}</span></div>`
+  ).join('');
+  box.innerHTML = ipRow + locRow + traceRow + dnsRows + localSuffix;
 }
 
 function setChecking(value) {
@@ -276,7 +304,9 @@ async function saveCurrentSettings() {
 }
 
 async function load() {
-  const d = await chrome.storage.local.get(['lastCheck','intervalMinutes','timeoutSeconds','notifications']);
+  const d = await chrome.storage.local.get(['lastCheck','intervalMinutes','timeoutSeconds','notifications','netInfo']);
+  if (d.netInfo) renderNetInfo(d.netInfo);
+  else { try { const ni = await chrome.runtime.sendMessage({ type: 'get-netinfo' }); if (ni) renderNetInfo(ni); } catch (e) {} }
 
   setupSlider('#interval-slider', INTERVAL_VALUES, '#interval-value', d.intervalMinutes ?? 5, 'мин', async () => {
     await saveCurrentSettings();
@@ -333,6 +363,7 @@ if (dashBtn) dashBtn.addEventListener('click', () => {
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'check-updated' && message.record) {
     render(message.record);
+    if (message.record.netInfo) renderNetInfo(message.record.netInfo);
     const allResults = [...(message.record.groups.ru||[]), ...(message.record.groups.global||[]), ...(message.record.groups.restricted||[])];
     const stillLoading = allResults.some(x => x.loading);
     if (!stillLoading) {
@@ -342,6 +373,9 @@ chrome.runtime.onMessage.addListener(message => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.netInfo && changes.netInfo.newValue) {
+    renderNetInfo(changes.netInfo.newValue);
+  }
   if (area === 'local' && changes.lastCheck) {
     const rec = changes.lastCheck.newValue;
     if (rec) {
@@ -365,5 +399,21 @@ timerInterval = setInterval(() => {
     renderSub();
   }
 }, 1000);
+
+// Автообновление при смене сетевого статуса: адаптеры вкл/выкл -> сразу проверка.
+window.addEventListener('online', () => {
+  setChecking(true);
+  chrome.runtime.sendMessage({ type: 'network-changed' }).then(r => { setChecking(false); if (r) render(r); }).catch(() => setChecking(false));
+});
+window.addEventListener('offline', () => {
+  renderNetInfo(null);
+  setChecking(true);
+  chrome.runtime.sendMessage({ type: 'network-changed' }).then(r => { setChecking(false); if (r) render(r); }).catch(() => setChecking(false));
+});
+if (navigator.connection && navigator.connection.addEventListener) {
+  navigator.connection.addEventListener('change', () => {
+    chrome.runtime.sendMessage({ type: 'network-changed' }).then(r => { if (r) render(r); }).catch(() => {});
+  });
+}
 
 load();

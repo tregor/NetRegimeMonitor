@@ -25,7 +25,7 @@
     <div class="sidebar-foot">
       <button id="btn-refresh" class="btn ghost w100">↻ Обновить</button>
       <button id="btn-clear" class="btn danger w100">Очистить историю</button>
-      <div class="foot-note">Хранится до 5000 проверок · до 80000 пингов</div>
+      <div class="foot-note" id="storage-info">—/500 · —/10k</div>
     </div>
   </aside>
 
@@ -37,7 +37,7 @@
       </div>
       <div class="top-actions">
         <span id="state-badge" class="badge">—</span>
-        <button id="btn-run" class="btn primary">Проверить сейчас</button>
+        <button id="btn-check" class="btn primary">↻ Проверить сейчас</button>
         <button id="btn-export-json" class="btn ghost">Экспорт JSON</button>
         <button id="btn-export-csv" class="btn ghost">Экспорт CSV</button>
         <label class="range-label">Период
@@ -45,9 +45,7 @@
             <option value="50">Последние 50</option>
             <option value="100" selected>Последние 100</option>
             <option value="250">Последние 250</option>
-            <option value="500">Последние 500</option>
-            <option value="1000">Последние 1000</option>
-            <option value="5000">Все (до 5000)</option>
+            <option value="500">Все (до 500)</option>
           </select>
         </label>
       </div>
@@ -55,6 +53,14 @@
 
     <!-- OVERVIEW -->
     <section id="tab-overview" class="tab active">
+      <div class="card net-card">
+        <div class="card-head">
+          <h3>Текущее соединение: IP → DNS</h3>
+          <span id="net-badge" class="badge">—</span>
+        </div>
+        <div id="net-grid" class="net-grid"><span class="hint">Сбор данных о соединении…</span></div>
+        <div id="net-note" class="hint" style="margin-top:8px">Автообновление при смене сетевого статуса (online/offline, смена адаптера).</div>
+      </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-title">Проверок</div><div id="kpi-total" class="kpi-val">—</div><div id="kpi-total-sub" class="kpi-sub"></div></div>
         <div class="kpi"><div class="kpi-title">RU доступность</div><div id="kpi-ru" class="kpi-val">—</div><div class="kpi-bar"><i id="kpi-ru-bar"></i></div></div>

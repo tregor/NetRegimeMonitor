@@ -419,6 +419,17 @@ summary:hover{
   color:#64748b;
   line-height:1.4;
 }
+.netinfo-head{display:flex;justify-content:space-between;align-items:center}
+.net-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:#334155;color:#e2e8f0}
+.net-badge.on{background:rgba(16,185,129,.2);color:#34d399}
+.net-badge.off{background:rgba(239,68,68,.2);color:#f87171}
+.netinfo{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#e2e8f0}
+.net-row{display:flex;justify-content:space-between;gap:8px}
+.net-key{color:#94a3b8}
+.net-val{font-weight:600;text-align:right;word-break:break-all}
+.net-val.ok{color:#34d399}
+.net-val.bad{color:#f87171}
+.net-hint{font-size:10px;color:#64748b}
 
 .setting-input, .setting-select {
   width: 100%;
