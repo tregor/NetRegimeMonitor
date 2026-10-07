@@ -97,6 +97,14 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
     chrome.storage.local.get(['netInfo']).then(d => sendResponse(d.netInfo || null));
     return true;
   }
+  if (message.type === 'get-dns-config') {
+    getDnsConfig().then(sendResponse);
+    return true;
+  }
+  if (message.type === 'save-dns-config') {
+    saveDnsConfig(message.config || {}).then(sendResponse);
+    return true;
+  }
   if (message.type === 'get-history') {
     chrome.storage.local.get(['history','pingLog','lastCheck','stableState','netInfo']).then(d => sendResponse({
       history: d.history || [],
@@ -272,29 +280,119 @@ function parseTrace(text) {
   return out;
 }
 
+// Настраиваемые DNS-провайдеры (админка дашборда). DoH-эндпоинты в стиле
+// cheburcheck (Quad9 DoH для обхода локальных ограничений + остальные).
+const DEFAULT_DNS_PROVIDERS = [
+  { id: 'cf', name: 'Cloudflare DNS', target: '1.1.1.1', doh: 'https://cloudflare-dns.com/dns-query', kind: 'dns-json', enabled: true },
+  { id: 'google', name: 'Google DNS', target: '8.8.8.8', doh: 'https://dns.google/resolve', kind: 'google', enabled: true },
+  { id: 'quad9', name: 'Quad9', target: '9.9.9.9', doh: 'https://dns.quad9.net/dns-query', kind: 'dns-json', enabled: true },
+  { id: 'opendns', name: 'OpenDNS', target: '208.67.222.222', doh: 'https://doh.opendns.com/dns-query', kind: 'dns-json', enabled: true }
+];
+const DEFAULT_DNS_DOMAINS = ['example.com', 'ya.ru', 'instagram.com'];
+
+async function getDnsConfig() {
+  const d = await chrome.storage.local.get(['dnsProviders', 'dnsDomains']);
+  const providers = Array.isArray(d.dnsProviders) && d.dnsProviders.length ? d.dnsProviders : DEFAULT_DNS_PROVIDERS;
+  const domains = Array.isArray(d.dnsDomains) && d.dnsDomains.length ? d.dnsDomains : DEFAULT_DNS_DOMAINS;
+  return { providers, domains };
+}
+
+async function saveDnsConfig(config) {
+  const patch = {};
+  if (Array.isArray(config.providers)) {
+    patch.dnsProviders = config.providers
+      .filter(p => p && p.doh)
+      .map(p => ({ id: String(p.id || ('dns_' + Date.now() + Math.floor(Math.random() * 1000))), name: String(p.name || p.doh), target: String(p.target || ''), doh: String(p.doh), kind: p.kind === 'google' ? 'google' : 'dns-json', enabled: p.enabled !== false }))
+      .slice(0, 20);
+  }
+  if (Array.isArray(config.domains)) {
+    patch.dnsDomains = config.domains.map(d => String(d).trim().toLowerCase()).filter(Boolean).slice(0, 20);
+  }
+  if (Object.keys(patch).length) await chrome.storage.local.set(patch);
+  return { ok: true, ...(await getDnsConfig()) };
+}
+
+// Один DoH-запрос A-записи. Никогда не кидает исключение — возвращает объект результата.
+async function dohQuery(provider, domain, timeoutMs) {
+  const started = Date.now();
+  try {
+    const url = `${provider.doh}?name=${encodeURIComponent(domain)}&type=A`;
+    const headers = provider.kind === 'google' ? {} : { accept: 'application/dns-json' };
+    const { res } = await timedFetch(url, { headers, cache: 'no-store' }, timeoutMs);
+    const ms = Date.now() - started;
+    if (!res || !res.ok) return { ok: false, ms, error: 'Нет ответа' };
+    let json = null;
+    try { json = await res.json(); } catch (e) { return { ok: false, ms, error: 'Битый ответ' }; }
+    const answers = (json.Answer || []).filter(a => a.type === 1 && a.data).map(a => a.data);
+    return { ok: true, ms, answers, dnsStatus: (json.Status ?? null) };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - started, error: 'Ошибка сети' };
+  }
+}
+
+function buildDnsVerdict(dnsResults, domains) {
+  const notes = [];
+  const inconsistentDomains = [];
+  for (const domain of domains) {
+    const answered = dnsResults.filter(r => r.answers && r.answers[domain]);
+    if (answered.length < 2) continue;
+    const variants = new Map();
+    for (const r of answered) {
+      const key = [...r.answers[domain]].sort().join(',');
+      if (!variants.has(key)) variants.set(key, []);
+      variants.get(key).push(r.name);
+    }
+    if (variants.size > 1) {
+      inconsistentDomains.push(domain);
+      const detail = [...variants.entries()].map(([ips, names]) => `${names.join('+')}: [${ips || 'пусто'}]`).join(' vs ');
+      notes.push(`${domain}: ответы резолверов различаются (${detail}) — возможна подмена/фильтрация DNS`);
+    }
+  }
+  const dead = dnsResults.filter(r => !r.ok);
+  for (const r of dead) notes.push(`${r.name} (${r.target}): недоступен — возможно блокировка DoH или нет сети`);
+  // Помечаем провайдеров, чей ответ отличается от большинства
+  for (const domain of domains) {
+    const answered = dnsResults.filter(r => r.answers && r.answers[domain]);
+    if (!answered.length) continue;
+    const counts = new Map();
+    for (const r of answered) {
+      const key = [...r.answers[domain]].sort().join(',');
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    let majority = null, best = -1;
+    for (const [key, n] of counts) if (n > best) { best = n; majority = key; }
+    for (const r of answered) {
+      if ([...r.answers[domain]].sort().join(',') !== majority) r.diff = true;
+    }
+  }
+  return { consistent: inconsistentDomains.length === 0, inconsistentDomains, notes };
+}
+
 async function collectNetInfo(timeoutSeconds) {
   const timeoutMs = Math.max(2000, Math.min(30000, (Number(timeoutSeconds) || 10) * 1000));
   const started = Date.now();
-  // Параллельно: Cloudflare trace (даёт внешний IP, colo, лок.), DoH Cloudflare, DoH Google
-  const [trace, dohCf, dohGoogle] = await Promise.all([
-    (async () => {
-      const { res, ms } = await timedFetch('https://www.cloudflare.com/cdn-cgi/trace', { cache: 'no-store' }, timeoutMs);
-      if (!res || !res.ok) return { ok: false, ms, error: 'Нет ответа' };
-      const t = parseTrace(await res.text().catch(() => ''));
-      return { ok: true, ms, ip: t.ip || null, loc: t.loc || null, colo: t.colo || null, warp: t.warp || null, http: t.http || null };
-    })(),
-    (async () => {
-      const { res, ms } = await timedFetch('https://cloudflare-dns.com/dns-query?name=example.com&type=A', { headers: { accept: 'application/dns-json' }, cache: 'no-store' }, timeoutMs);
-      if (!res || !res.ok) return { ok: false, ms, label: 'Cloudflare DNS (1.1.1.1 DoH)' };
-      return { ok: true, ms, label: 'Cloudflare DNS (1.1.1.1 DoH)' };
-    })(),
-    (async () => {
-      const { res, ms } = await timedFetch('https://dns.google/resolve?name=example.com&type=A', { cache: 'no-store' }, timeoutMs);
-      if (!res || !res.ok) return { ok: false, ms, label: 'Google DNS (8.8.8.8 DoH)' };
-      return { ok: true, ms, label: 'Google DNS (8.8.8.8 DoH)' };
-    })()
-  ]);
-  const online = trace.ok || dohCf.ok || dohGoogle.ok;
+  const { providers, domains } = await getDnsConfig().catch(() => ({ providers: DEFAULT_DNS_PROVIDERS, domains: DEFAULT_DNS_DOMAINS }));
+  const active = providers.filter(p => p && p.enabled !== false && p.doh);
+  const traceP = (async () => {
+    const { res, ms } = await timedFetch('https://www.cloudflare.com/cdn-cgi/trace', { cache: 'no-store' }, timeoutMs);
+    if (!res || !res.ok) return { ok: false, ms };
+    const t = parseTrace(await res.text().catch(() => ''));
+    return { ok: true, ms, ip: t.ip || null, loc: t.loc || null, colo: t.colo || null, warp: t.warp || null };
+  })();
+  const dnsP = Promise.all(active.map(async (p) => {
+    const answers = {};
+    let ok = false, ms = null;
+    for (const domain of domains) {
+      const r = await dohQuery(p, domain, timeoutMs);
+      if (ms === null) ms = r.ms;
+      if (r.ok) { ok = true; answers[domain] = r.answers; }
+      else answers[domain] = null;
+    }
+    return { id: p.id, name: p.name, target: p.target, ok, ms: ms ?? 0, answers, diff: false };
+  }));
+  const [trace, dnsResults] = await Promise.all([traceP, dnsP]);
+  const online = trace.ok || dnsResults.some(r => r.ok);
+  const dnsVerdict = buildDnsVerdict(dnsResults, domains);
   return {
     at: Date.now(),
     durationMs: Date.now() - started,
@@ -304,11 +402,14 @@ async function collectNetInfo(timeoutSeconds) {
     colo: trace.colo || null,
     warp: trace.warp || null,
     traceMs: trace.ok ? trace.ms : null,
-    dns: [
-      { name: 'Cloudflare DNS', target: '1.1.1.1 (DoH)', ok: dohCf.ok, ms: dohCf.ms },
-      { name: 'Google DNS', target: '8.8.8.8 (DoH)', ok: dohGoogle.ok, ms: dohGoogle.ms }
-    ]
+    dns: dnsResults,
+    dnsDomains: domains,
+    dnsVerdict
   };
+}
+
+function broadcastNetInfo(netInfo) {
+  chrome.runtime.sendMessage({ type: 'netinfo-updated', netInfo }).catch(() => {});
 }
 
 async function runCheck(isManual = false) {
@@ -330,7 +431,7 @@ async function runCheck(isManual = false) {
   const old = await chrome.storage.local.get(['stableState', 'candidateCode', 'candidateCount', 'history', 'pingLog', 'netInfo']);
 
   // Показатели соединения собираем параллельно опросам сайтов, не блокируя их.
-  const netInfoPromise = collectNetInfo(s.timeoutSeconds).catch(() => ({ at: Date.now(), online: false, publicIp: null, dns: [] }));
+  const netInfoPromise = collectNetInfo(s.timeoutSeconds).catch(() => ({ at: Date.now(), online: false, publicIp: null, dns: [], dnsDomains: [], dnsVerdict: { consistent: true, inconsistentDomains: [], notes: ['Не удалось собрать данные соединения'] } }));
 
   const initialCandidate = classify(groupsData);
   const initialRecord = {
@@ -364,7 +465,10 @@ async function runCheck(isManual = false) {
   await Promise.allSettled(promises);
   const netInfo = await netInfoPromise;
   // Отдельный ключ — историю не перезаписываем и не чистим.
+  // Сохраняем и рассылаем сразу, не дожидаясь конца опроса сайтов,
+  // чтобы блок соединения не висел в «Сбор данных…».
   await chrome.storage.local.set({ netInfo });
+  broadcastNetInfo(netInfo);
 
   if (signal.aborted) {
     const record = { at: now, candidate: classify(groupsData), stable: old.stableState, groups: groupsData, intervalMinutes: s.intervalMinutes, netInfo };

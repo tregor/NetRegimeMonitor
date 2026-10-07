@@ -249,7 +249,7 @@ function renderNetInfo(netInfo) {
   const localSuffix = `<div class="net-hint">Адаптер: ${navigator.onLine ? 'подключён' : 'ОТКЛЮЧЁН'}${eff}${down}${rtt}</div>`;
   if (!netInfo) {
     if (badge) { badge.textContent = navigator.onLine ? '…' : 'OFFLINE'; badge.className = 'net-badge'; }
-    box.innerHTML = `Сбор данных о соединении…${localSuffix}`;
+    box.innerHTML = `Сбор данных о соединении…${localSuffix}<div class="net-hint">Если висит долго — перезагрузите расширение на chrome://extensions и нажмите «Проверить сейчас».</div>`;
     return;
   }
   if (badge) {
@@ -259,10 +259,16 @@ function renderNetInfo(netInfo) {
   const ipRow = `<div class="net-row"><span class="net-key">Внешний IP</span><span class="net-val">${netInfo.publicIp || '—'}</span></div>`;
   const locRow = `<div class="net-row"><span class="net-key">Локация / PoP</span><span class="net-val">${[netInfo.loc, netInfo.colo].filter(Boolean).join(' · ') || '—'}</span></div>`;
   const traceRow = `<div class="net-row"><span class="net-key">До Cloudflare</span><span class="net-val ${netInfo.traceMs != null ? 'ok' : 'bad'}">${netInfo.traceMs != null ? netInfo.traceMs + ' мс' : 'недоступно'}</span></div>`;
-  const dnsRows = (netInfo.dns || []).map(d =>
-    `<div class="net-row"><span class="net-key">${d.name} <span style="color:#64748b">${d.target}</span></span><span class="net-val ${d.ok ? 'ok' : 'bad'}">${d.ok ? d.ms + ' мс' : 'FAIL ' + d.ms + ' мс'}</span></div>`
-  ).join('');
-  box.innerHTML = ipRow + locRow + traceRow + dnsRows + localSuffix;
+  const dnsRows = (netInfo.dns || []).map(d => {
+    const warn = d.diff ? ' ⚠' : '';
+    const title = d.answers
+      ? Object.entries(d.answers).map(([dom, ips]) => `${dom}: ${ips ? ips.join(', ') : 'FAIL'}`).join(' | ')
+      : (d.target || '');
+    return `<div class="net-row"><span class="net-key">${d.name} <span style="color:#64748b">${d.target || ''}</span></span><span class="net-val ${d.ok ? 'ok' : 'bad'}" title="${title}">${d.ok ? d.ms + ' мс' : 'FAIL ' + d.ms + ' мс'}${warn}</span></div>`;
+  }).join('');
+  const verdictWarn = (netInfo.dnsVerdict && !netInfo.dnsVerdict.consistent)
+    ? `<div class="net-hint" style="color:#f59e0b">⚠ Ответы DNS различаются — возможна подмена (см. вкладку DNS в панели)</div>` : '';
+  box.innerHTML = ipRow + locRow + traceRow + dnsRows + verdictWarn + localSuffix;
 }
 
 function setChecking(value) {
@@ -361,7 +367,10 @@ if (dashBtn) dashBtn.addEventListener('click', () => {
 });
 
 chrome.runtime.onMessage.addListener(message => {
-  if (message.type === 'check-updated' && message.record) {
+  if (message.type === 'netinfo-updated' && message.netInfo) {
+    renderNetInfo(message.netInfo);
+    return;
+  }  if (message.type === 'check-updated' && message.record) {
     render(message.record);
     if (message.record.netInfo) renderNetInfo(message.record.netInfo);
     const allResults = [...(message.record.groups.ru||[]), ...(message.record.groups.global||[]), ...(message.record.groups.restricted||[])];

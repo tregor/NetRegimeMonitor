@@ -87,5 +87,12 @@ canvas{width:100%;background:#0b1222;border-radius:8px;border:1px solid var(--bo
 .net-item .sub{font-size:11px;color:var(--dim);margin-top:2px}
 .net-item .ok{color:var(--ok)}
 .net-item .bad{color:var(--bad)}
+.dns-form{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.dns-form input,.dns-form select{background:#0b1222;border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;font-size:12px;flex:1;min-width:140px}
+.dns-domains{display:flex;gap:8px;flex-wrap:wrap}
+.dns-tag{background:#0b1222;border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;display:flex;gap:8px;align-items:center}
+.dns-tag button{background:transparent;border:none;color:#f87171;cursor:pointer;font-weight:700;font-size:13px}
+td.cell-diff{background:rgba(245,158,11,.25)!important}
+td.cell-fail{color:#f87171}
 .tbl.sortable th[data-sort]{cursor:pointer;user-select:none}
 .tbl.sortable th[data-sort]:hover{color:var(--text)}

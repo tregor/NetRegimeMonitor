@@ -4,6 +4,7 @@ const HISTORY_LIMIT = 500;
 const PING_LIMIT = 10000;
 let history=[], pingLog=[], lastCheck=null;
 let netInfo=null;
+let dnsConfig={providers:[],domains:[]};
 let rangeN=100;
 let historySort={key:'at', dir:'desc'};
 let sitesSort={key:'uptime', dir:'desc'};
@@ -163,7 +164,85 @@ function renderCorrelations(ordered){
   if(rRR!==null&&rRR<-0.3) add(`RU ↔ Restricted отрицательно (r=${rRR.toFixed(2)})`);
   if(ordered.length<10) add('Для точных выводов нужно больше истории (≥30 проверок).');
 }
-function renderAll(){ const ordered=sliceHistory(); updateStorageInfo(); renderNetInfo(); renderKPIs(ordered); renderCharts(ordered); renderHistoryTable(ordered); renderSites(ordered); renderCorrelations(ordered); }
+function renderAll(){ const ordered=sliceHistory(); updateStorageInfo(); renderNetInfo(); renderDnsTab(); renderKPIs(ordered); renderCharts(ordered); renderHistoryTable(ordered); renderSites(ordered); renderCorrelations(ordered); }
+
+// --- Вкладка DNS: настройка провайдеров + матрица ответов ---
+function loadDnsConfig(cb){
+  const done = (cfg)=>{ if(cfg && cfg.providers) dnsConfig=cfg; if(cb) cb(); };
+  try{
+    if(chrome.storage && chrome.storage.local){
+      chrome.storage.local.get(['dnsProviders','dnsDomains'], d=>{
+        if(d.dnsProviders) dnsConfig={providers:d.dnsProviders, domains:d.dnsDomains||[]};
+        if(!dnsConfig.providers.length){
+          try{ chrome.runtime.sendMessage({type:'get-dns-config'}, res=>{ if(res && res.providers){ dnsConfig=res; renderDnsTab(); } if(cb) cb(); }); return; }catch(e){}
+        }
+        renderDnsTab(); if(cb) cb();
+      });
+    } else done(null);
+  }catch(e){ done(null); }
+}
+function saveDnsConfig(){
+  try{
+    chrome.runtime.sendMessage({type:'save-dns-config', config:dnsConfig}, res=>{ if(res && res.providers) dnsConfig=res; renderDnsTab(); });
+  }catch(e){
+    try{ chrome.storage.local.set({dnsProviders:dnsConfig.providers, dnsDomains:dnsConfig.domains}); }catch(e2){}
+  }
+}
+function renderDnsTab(){
+  const tbody=document.querySelector('#tbl-dns tbody');
+  if(!tbody) return;
+  tbody.innerHTML='';
+  const lastMs={}; (netInfo?.dns||[]).forEach(r=>{ lastMs[r.id]=r; });
+  (dnsConfig.providers||[]).forEach(p=>{
+    const tr=document.createElement('tr');
+    const live=lastMs[p.id];
+    const lat=live?(live.ok?live.ms+' мс':'FAIL'):'—';
+    tr.innerHTML=`<td><input type="checkbox" data-dns-toggle="${p.id}" ${p.enabled!==false?'checked':''}></td><td>${p.name}</td><td>${p.target||'—'}</td><td style="word-break:break-all;max-width:280px">${p.doh}</td><td>${lat}${live&&live.diff?' ⚠':''}</td><td><button class="btn ghost" data-dns-del="${p.id}" style="padding:4px 8px">×</button></td>`;
+    tbody.appendChild(tr);
+  });
+  if(!(dnsConfig.providers||[]).length){
+    const tr=document.createElement('tr'); tr.innerHTML=`<td colspan="6" style="text-align:center;color:#64748b">Нет провайдеров — будут использованы встроенные по умолчанию</td>`; tbody.appendChild(tr);
+  }
+  const domBox=document.getElementById('dns-domains');
+  domBox.innerHTML='';
+  (dnsConfig.domains||[]).forEach(d=>{
+    const s=document.createElement('span'); s.className='dns-tag';
+    s.innerHTML=`${d} <button data-domain-del="${d}" title="Убрать">×</button>`;
+    domBox.appendChild(s);
+  });
+  renderDnsMatrix();
+}
+function renderDnsMatrix(){
+  const wrap=document.getElementById('dns-matrix');
+  const verdict=document.getElementById('dns-verdict');
+  if(!wrap) return;
+  const ni=netInfo||lastCheck?.netInfo||null;
+  const domains=ni?.dnsDomains||dnsConfig.domains||[];
+  const results=ni?.dns||[];
+  if(!ni||!results.length){ wrap.innerHTML='<span class="hint">Нет данных — нажмите «Проверить сейчас».</span>'; if(verdict) verdict.innerHTML=''; return; }
+  const table=document.createElement('table'); table.className='matrix';
+  const thead=document.createElement('tr');
+  thead.innerHTML='<th></th>'+results.map(r=>`<th title="${r.target||''}">${r.name}</th>`).join('');
+  table.appendChild(thead);
+  domains.forEach(dom=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="row-label">${dom}</td>`+results.map(r=>{
+      const ips=r.answers?r.answers[dom]:undefined;
+      if(!r.ok||!ips) return `<td class="cell-fail">FAIL</td>`;
+      const txt=ips.length?ips.join('<br>'):'пусто (NXDOMAIN?)';
+      const cls=r.diff?'cell-diff':'';
+      return `<td class="${cls}">${txt}</td>`;
+    }).join('');
+    table.appendChild(tr);
+  });
+  wrap.innerHTML=''; wrap.appendChild(table);
+  if(verdict){
+    verdict.innerHTML='';
+    const notes=ni.dnsVerdict?.notes||[];
+    if(!notes.length){ const li=document.createElement('li'); li.textContent='Все резолверы отвечают согласованно, подмены DNS не видно.'; verdict.appendChild(li); }
+    else notes.forEach(n=>{ const li=document.createElement('li'); li.textContent=n; verdict.appendChild(li); });
+  }
+}
 function renderNetInfo(){
   const grid=document.getElementById('net-grid');
   const badge=document.getElementById('net-badge');
@@ -176,7 +255,7 @@ function renderNetInfo(){
     : '';
   if(!ni){
     if(badge){ badge.textContent = (typeof navigator !== 'undefined' && !navigator.onLine) ? 'OFFLINE' : 'Сбор…'; }
-    grid.innerHTML = `<span class="hint">Сбор данных о соединении… ${localTxt}</span>`;
+    grid.innerHTML = `<span class="hint">Сбор данных о соединении… ${localTxt} Если висит долго — перезагрузите расширение на chrome://extensions и нажмите «Проверить сейчас».</span>`;
     return;
   }
   if(badge){ badge.textContent = ni.online ? 'ONLINE' : 'OFFLINE'; badge.style.background = ni.online ? '#10b981' : '#ef4444'; badge.style.color = '#fff'; }
@@ -185,7 +264,7 @@ function renderNetInfo(){
   grid.innerHTML =
     cell('Внешний IP', ni.publicIp || '—', [ni.loc, ni.colo].filter(Boolean).join(' · ') || 'локация неизвестна') +
     cell('До Cloudflare (trace)', ni.traceMs != null ? ni.traceMs + ' мс' : 'недоступно', 'IP → CDN edge', ni.traceMs != null ? 'ok' : 'bad') +
-    dns.map(d => cell(d.name, d.ok ? d.ms + ' мс' : 'FAIL', d.target, d.ok ? 'ok' : 'bad')).join('') +
+    dns.map(d => cell(d.name, (d.ok ? d.ms + ' мс' : 'FAIL') + (d.diff ? ' ⚠' : ''), d.target, d.ok ? 'ok' : 'bad')).join('') +
     cell('Локальный статус', (typeof navigator !== 'undefined' && navigator.onLine) ? 'подключён' : 'отключён', localTxt);
   const note=document.getElementById('net-note');
   if(note) note.textContent = `Обновлено ${fmtTime(ni.at)} · автообновление при смене сетевого статуса (online/offline, смена адаптера).`;
@@ -197,7 +276,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     btn.classList.add('active'); document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
-    document.getElementById('page-title').textContent={overview:'Дашборд доступности',history:'Журнал пингов',sites:'Сайты',correlations:'Корреляции'}[btn.dataset.tab];
+    document.getElementById('page-title').textContent={overview:'Дашборд доступности',history:'Журнал пингов',sites:'Сайты',correlations:'Корреляции',dns:'DNS-серверы'}[btn.dataset.tab];
   }));
   document.getElementById('range-select').addEventListener('change',e=>{ rangeN=Number(e.target.value); renderAll(); });
   document.getElementById('corr-group-filter').addEventListener('change',()=>renderAll());
@@ -228,6 +307,44 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   document.getElementById('btn-export-json').addEventListener('click',exportJSON);
   document.getElementById('btn-export-csv').addEventListener('click',exportCSV);
+  // DNS: добавление/удаление провайдеров и доменов (настройки живут в storage, БД истории не трогаем)
+  document.getElementById('dns-add').addEventListener('click',()=>{
+    const name=document.getElementById('dns-new-name').value.trim();
+    const target=document.getElementById('dns-new-target').value.trim();
+    let doh=document.getElementById('dns-new-doh').value.trim();
+    const kind=document.getElementById('dns-new-kind').value;
+    if(!doh){ alert('Укажите DoH URL'); return; }
+    if(!/^https:\/\//.test(doh)){ alert('DoH URL должен начинаться с https://'); return; }
+    (dnsConfig.providers=dnsConfig.providers||[]).push({id:'dns_'+Date.now(), name:name||doh, target, doh, kind, enabled:true});
+    document.getElementById('dns-new-name').value=''; document.getElementById('dns-new-target').value=''; document.getElementById('dns-new-doh').value='';
+    saveDnsConfig();
+  });
+  document.getElementById('dns-domain-add').addEventListener('click',()=>{
+    const v=document.getElementById('dns-domain-new').value.trim().toLowerCase();
+    if(!v) return;
+    dnsConfig.domains=dnsConfig.domains||[];
+    if(!dnsConfig.domains.includes(v)) dnsConfig.domains.push(v);
+    document.getElementById('dns-domain-new').value='';
+    saveDnsConfig();
+  });
+  document.addEventListener('click',e=>{
+    const t=e.target.closest&&e.target.closest('[data-dns-del]');
+    if(t){ dnsConfig.providers=(dnsConfig.providers||[]).filter(p=>p.id!==t.getAttribute('data-dns-del')); saveDnsConfig(); return; }
+    const dd=e.target.closest&&e.target.closest('[data-domain-del]');
+    if(dd){ dnsConfig.domains=(dnsConfig.domains||[]).filter(d=>d!==dd.getAttribute('data-domain-del')); saveDnsConfig(); return; }
+  });
+  document.addEventListener('change',e=>{
+    const t=e.target.closest&&e.target.closest('[data-dns-toggle]');
+    if(t){ const p=(dnsConfig.providers||[]).find(x=>x.id===t.getAttribute('data-dns-toggle')); if(p){ p.enabled=t.checked; saveDnsConfig(); } }
+  });
+  // Мгновенные обновления от background (раньше дашборд их игнорировал — отсюда «вечный сбор»)
+  try{
+    chrome.runtime.onMessage.addListener(msg=>{
+      if(msg.type==='netinfo-updated'&&msg.netInfo){ netInfo=msg.netInfo; renderNetInfo(); renderDnsTab(); }
+      if(msg.type==='check-updated'&&msg.record){ lastCheck=msg.record; if(msg.record.netInfo){ netInfo=msg.record.netInfo; renderNetInfo(); renderDnsTab(); } }
+    });
+  }catch(e){}
+  loadDnsConfig();
   fetchData(); setInterval(fetchData,8000);
   try{ if(chrome.storage&&chrome.storage.onChanged) chrome.storage.onChanged.addListener((ch,area)=>{ if(area==='local'&&(ch.history||ch.pingLog||ch.lastCheck||ch.netInfo)){ if(ch.netInfo?.newValue) netInfo=ch.netInfo.newValue; if(ch.lastCheck?.newValue?.netInfo) netInfo=ch.lastCheck.newValue.netInfo; fetchData(); } }); }catch(e){}
   // Автообновление при смене сетевого статуса компьютера

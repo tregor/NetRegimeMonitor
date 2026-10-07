@@ -21,6 +21,7 @@
       <button class="nav-btn" data-tab="history">Журнал пингов</button>
       <button class="nav-btn" data-tab="sites">Сайты</button>
       <button class="nav-btn" data-tab="correlations">Корреляции</button>
+      <button class="nav-btn" data-tab="dns">DNS</button>
     </nav>
     <div class="sidebar-foot">
       <button id="btn-refresh" class="btn ghost w100">↻ Обновить</button>
@@ -150,6 +151,45 @@
       <div class="card">
         <div class="card-head"><h3>Интерпретация</h3></div>
         <ul id="corr-insights" class="insights"></ul>
+      </div>
+    </section>
+
+    <!-- DNS -->
+    <section id="tab-dns" class="tab">
+      <div class="card">
+        <div class="card-head"><h3>DNS-провайдеры — настройка</h3><span class="hint">опрос через DoH, как у cheburcheck (Quad9 DoH обходит локальные ограничения)</span></div>
+        <div class="table-wrap">
+          <table class="tbl" id="tbl-dns">
+            <thead><tr><th>Вкл</th><th>Имя</th><th>IP / цель</th><th>DoH URL</th><th>Задержка</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="dns-form">
+          <input id="dns-new-name" placeholder="Имя (напр. Мой DNS)">
+          <input id="dns-new-target" placeholder="IP (напр. 77.88.8.8)">
+          <input id="dns-new-doh" placeholder="DoH URL (напр. https://…/dns-query)">
+          <select id="dns-new-kind"><option value="dns-json">dns-json</option><option value="google">google-совместимый</option></select>
+          <button id="dns-add" class="btn">Добавить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Тестовые домены</h3><span class="hint">каждый резолвер опрашивается по каждому домену, ответы сравниваются</span></div>
+        <div id="dns-domains" class="dns-domains"></div>
+        <div class="dns-form">
+          <input id="dns-domain-new" placeholder="домен (напр. tiktok.com)">
+          <button id="dns-domain-add" class="btn">Добавить домен</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Ответы резолверов (A-записи)</h3><span class="hint">подсветка = ответ отличается от большинства (возможна подмена)</span></div>
+        <div id="dns-matrix" class="matrix-wrap"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Вердикт DNS</h3></div>
+        <ul id="dns-verdict" class="insights"></ul>
       </div>
     </section>
 
