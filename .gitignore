@@ -1,2 +1,4 @@
 *.zip
 releases/
+web/node_modules/
+web/dist/

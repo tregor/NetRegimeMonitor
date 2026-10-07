@@ -1,0 +1,13 @@
+{
+  "name": "Net Regime Monitor",
+  "short_name": "NetRegime",
+  "description": "Проверка доступности сайтов и DNS. Работает офлайн.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/icon128.png", "sizes": "128x128", "type": "image/png" }
+  ]
+}
