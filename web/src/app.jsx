@@ -9,6 +9,7 @@ import {
   drawLineChart, drawStateDist, drawHeatmap,
 } from './lib/charts.js';
 import DnsTab from './components/DnsTab.jsx';
+import Privacy, { PRIVACY_HASH } from './components/Privacy.jsx';
 
 const GROUP_KEYS = ['ru', 'global', 'restricted'];
 const GROUP_TITLES = { ru: 'Российские сервисы', global: 'Нейтральные зарубежные', restricted: 'Ограниченные ресурсы' };
@@ -33,6 +34,8 @@ export default function App() {
   const [dnsDomains, setDnsDomains] = useState(() => store.dnsDomains || DEFAULT_DNS_DOMAINS);
   const [range, setRange] = useState(100);
   const [online, setOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
+  const [privacy, setPrivacy] = useState(() => (typeof location !== 'undefined' && location.hash === PRIVACY_HASH));
+  const [pwaReady, setPwaReady] = useState(false);
   const runId = useRef(0);
 
   const saveSettings = (patch) => {
@@ -92,7 +95,26 @@ export default function App() {
     setChecking(false);
   }
 
-  // Автопроверка по интервалу + при смене сетевого статуса
+  useEffect(() => {
+    const sync = () => setPrivacy(location.hash === PRIVACY_HASH);
+    window.addEventListener('hashchange', sync);
+    const pwa = () => setPwaReady(true);
+    window.addEventListener('nrm-pwa-ready', pwa);
+    if (window.__nrmInstallPrompt) setPwaReady(true);
+    return () => { window.removeEventListener('hashchange', sync); window.removeEventListener('nrm-pwa-ready', pwa); };
+  }, []);
+
+  const installPwa = async () => {
+    const ev = window.__nrmInstallPrompt;
+    if (ev) {
+      ev.prompt();
+      try { await ev.userChoice; } catch {}
+      window.__nrmInstallPrompt = null;
+      setPwaReady(false);
+    } else {
+      alert('В Chrome: меню ⋮ → «Установить Net Regime Monitor…». На телефоне: меню → «Добавить на главный экран».');
+    }
+  };
   useEffect(() => {
     const t = setInterval(() => { if (!checking) runCheck(); }, Math.max(1, Number(settings.intervalMinutes) || 5) * 60 * 1000);
     return () => clearInterval(t);
@@ -152,8 +174,8 @@ export default function App() {
       <main class="main">
         <header class="topbar">
           <div>
-            <h1>{titles[tab]}</h1>
-            <div class="sub">{display ? `Последняя проверка: ${fmtTime(display.at)} · интервал ${display.intervalMinutes} мин` : 'Ещё не проверялось — нажмите «Проверить сейчас»'}</div>
+            <h1>{privacy ? 'Конфиденциальность' : titles[tab]}</h1>
+            {!privacy && <div class="sub">{display ? `Последняя проверка: ${fmtTime(display.at)} · интервал ${display.intervalMinutes} мин` : 'Ещё не проверялось — нажмите «Проверить сейчас»'}</div>}
           </div>
           <div class="top-actions">
             <span class="badge" style={state ? `background:${STATE_COLORS[state.code] || '#334155'};color:#fff` : ''}>
@@ -170,11 +192,22 @@ export default function App() {
           </div>
         </header>
 
+        {privacy
+          ? <Privacy onBack={() => { location.hash = ''; setPrivacy(false); }} />
+          : (<>
         {tab === 'overview' && <Overview ordered={ordered} history={history} display={display} netInfo={netInfo} state={state} />}
         {tab === 'history' && <HistoryTab ordered={ordered} />}
         {tab === 'sites' && <SitesTab ordered={ordered} />}
         {tab === 'dns' && <DnsTab netInfo={netInfo} providers={dnsProviders} domains={dnsDomains} onSave={saveDns} onCheck={runCheck} checking={checking} />}
         {tab === 'correlations' && <CorrTab ordered={ordered} />}
+          </>)}
+
+        <footer class="site-footer">
+          <a class="btn" href="/extension.zip" download>Установить расширение (.zip)</a>
+          <button class="btn" onClick={installPwa}>{pwaReady ? 'Установить приложение (PWA)' : 'Как установить приложение'}</button>
+          <a class="foot-link" href={PRIVACY_HASH}>Конфиденциальность</a>
+          <span class="hint">Net Regime Monitor · работает офлайн</span>
+        </footer>
       </main>
     </div>
   );

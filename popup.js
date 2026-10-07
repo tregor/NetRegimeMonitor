@@ -366,6 +366,17 @@ if (dashBtn) dashBtn.addEventListener('click', () => {
   else window.open(url, '_blank');
 });
 
+// Ссылки на сайт и политику — мелким шрифтом внизу.
+const SITE_URL = 'https://net-regime-monitor.therephrase.com/';
+function openExt(url) {
+  if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
+  else window.open(url, '_blank');
+}
+const linkSite = document.getElementById('link-site');
+if (linkSite) linkSite.addEventListener('click', (e) => { e.preventDefault(); openExt(SITE_URL); });
+const linkPrivacy = document.getElementById('link-privacy');
+if (linkPrivacy) linkPrivacy.addEventListener('click', (e) => { e.preventDefault(); openExt(SITE_URL + '#/privacy'); });
+
 chrome.runtime.onMessage.addListener(message => {
   if (message.type === 'netinfo-updated' && message.netInfo) {
     renderNetInfo(message.netInfo);

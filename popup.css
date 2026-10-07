@@ -419,6 +419,9 @@ summary:hover{
   color:#64748b;
   line-height:1.4;
 }
+.ext-links{margin-top:4px !important;font-size:10px !important}
+.ext-links a{color:#7aa2f7;text-decoration:none}
+.ext-links a:hover{text-decoration:underline}
 .netinfo-head{display:flex;justify-content:space-between;align-items:center}
 .net-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:#334155;color:#e2e8f0}
 .net-badge.on{background:rgba(16,185,129,.2);color:#34d399}

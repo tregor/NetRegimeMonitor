@@ -91,6 +91,11 @@ canvas.chart{width:100%;background:#0b1222;border-radius:8px;border:1px solid va
 td.cell-diff{background:rgba(245,158,11,.25)!important}
 td.cell-hijack{background:rgba(239,68,68,.3)!important;box-shadow:inset 0 0 0 1px #ef4444}
 td.cell-fail{color:#f87171}
+.legal p{margin:8px 0;color:#cbd5e1;font-size:13px}
+.site-footer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;padding-top:12px;border-top:1px solid var(--border)}
+.site-footer .btn{width:auto;text-decoration:none}
+.foot-link{font-size:12px;color:var(--muted)}
+.foot-link:hover{color:var(--text)}
 .settings-row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
 .setting label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px}
 .setting input{background:#0b1222;border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;font-size:12px;width:120px}

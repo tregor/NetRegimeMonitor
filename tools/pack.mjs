@@ -1,7 +1,7 @@
 // Упаковка расширения в versioned zip: releases/NetRegtimeMonitor-v<ver>-<YYYYMMDD-HHmmss>-<githash>.zip
 // Без зависимостей (чистый Node): ZIP пишется методом store, плюс .sha256.txt рядом.
 // Запуск: node tools/pack.mjs
-// В пакет НЕ входят: .git, releases, *.zip, tools, test.js.
+// В пакет НЕ входят: .git, releases, *.zip, tools, web, dist, test.js.
 import { readdirSync, statSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,7 +9,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const EXCLUDE_DIRS = new Set(['.git', 'releases', 'tools', '.github', 'node_modules']);
+const EXCLUDE_DIRS = new Set(['.git', 'releases', 'tools', 'web', 'dist', '.github', 'node_modules']);
 const EXCLUDE_FILES = new Set(['test.js']);
 
 // --- CRC32 (для ZIP нужен, в node:crypto его нет) ---
