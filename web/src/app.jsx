@@ -283,7 +283,7 @@ function Overview({ ordered, history, display, netInfo, state }) {
 
       {display && (
         <div class="card">
-          <div class="card-head"><h3>Контрольные группы — последняя проверка</h3></div>
+          <div class="card-head"><h3>Контрольные группы — последняя проверка</h3><span class="hint">«~» = замер без CORS: сеть отвечает, статус скрыт браузером</span></div>
           {GROUP_KEYS.map((g) => (
             <div key={g} style="margin-bottom:10px">
               <div class="hint" style="margin-bottom:4px">{GROUP_TITLES[g]}</div>
@@ -291,8 +291,8 @@ function Overview({ ordered, history, display, netInfo, state }) {
                 <div key={x.url} style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dashed #1e293b;font-size:12px">
                   <span style={`width:8px;height:8px;border-radius:50%;flex:none;background:${x.loading ? '#64748b' : x.ok ? '#10b981' : '#ef4444'}`}></span>
                   <span style="flex:1">{x.name}</span>
-                  <span style={`color:${x.loading ? '#64748b' : x.ok ? '#34d399' : '#f87171'}`}>
-                    {x.loading ? '…' : x.ok ? `${x.status} · ${x.latency}мс` : (x.error || 'Ошибка')}
+                  <span style={`color:${x.loading ? '#64748b' : x.ok ? '#34d399' : '#f87171'}`} title={x.opaque ? 'no-cors замер: DNS/TCP/TLS/HTTP прошли, точный статус браузер скрыл' : (x.via === 'cors' ? 'CORS-замер: реальный HTTP-статус' : '')}>
+                    {x.loading ? '…' : x.ok ? `${x.status ?? '~'} · ${x.latency}мс` : (x.error || 'Ошибка')}
                   </span>
                 </div>
               ))}

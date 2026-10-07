@@ -89,6 +89,7 @@ canvas.chart{width:100%;background:#0b1222;border-radius:8px;border:1px solid va
 .dns-tag{background:#0b1222;border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;display:flex;gap:8px;align-items:center}
 .dns-tag button{background:transparent;border:none;color:#f87171;cursor:pointer;font-weight:700;font-size:13px}
 td.cell-diff{background:rgba(245,158,11,.25)!important}
+td.cell-hijack{background:rgba(239,68,68,.3)!important;box-shadow:inset 0 0 0 1px #ef4444}
 td.cell-fail{color:#f87171}
 .settings-row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
 .setting label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px}

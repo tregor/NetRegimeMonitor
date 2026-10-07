@@ -78,7 +78,7 @@ export default function DnsTab({ netInfo, providers, domains, onSave, onCheck, c
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>Ответы резолверов (A-записи)</h3></div>
+                <div class="card-head"><h3>Ответы резолверов (A-записи)</h3><span class="hint">подсветка = отличается от большинства; красная рамка = признаки подмены</span></div>
         {!results.length
           ? <span class="hint">Нет данных — нажмите «Проверить сейчас».</span>
           : <div class="matrix-wrap"><table class="matrix">
@@ -90,7 +90,9 @@ export default function DnsTab({ netInfo, providers, domains, onSave, onCheck, c
                   {results.map((r) => {
                     const ips = r.answers ? r.answers[dom] : undefined;
                     if (!r.ok || !ips) return <td key={r.id} class="cell-fail">FAIL</td>;
-                    return <td key={r.id} class={r.diff ? 'cell-diff' : ''}>{ips.length ? ips.join(', ') : 'пусто (NXDOMAIN?)'}</td>;
+                    const hijacked = (netInfo?.dnsVerdict?.hijackDomains || []).includes(dom);
+                    const title = `DNS-статус: ${r.statuses?.[dom] ?? '—'} (0=OK, 3=NXDOMAIN)`;
+                    return <td key={r.id} title={title} class={`${r.diff ? 'cell-diff' : ''}${hijacked ? ' cell-hijack' : ''}`}>{ips.length ? ips.join(', ') : 'пусто (NXDOMAIN?)'}</td>;
                   })}
                 </tr>
               ))}

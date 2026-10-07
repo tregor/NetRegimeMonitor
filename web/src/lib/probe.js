@@ -65,25 +65,50 @@ export async function timedFetch(url, options = {}, timeoutMs = 8000) {
 }
 
 export async function probeSite(name, url, timeoutMs, onComplete) {
-  const started = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let result;
-  try {
-    const response = await fetch(url + (url.includes('?') ? '&' : '?') + '_nrm=' + Date.now(), {
-      method: 'GET', cache: 'no-store', redirect: 'follow', signal: controller.signal,
-    });
-    const latency = Date.now() - started;
-    const ok = response.status >= 200 && response.status < 500;
-    result = { name, url, ok, status: response.status, latency, error: ok ? null : `${response.status}` };
-  } catch (e) {
-    const latency = Date.now() - started;
-    result = { name, url, ok: false, status: null, latency, error: 'Ошибка сети' };
-  } finally {
-    clearTimeout(timer);
+  const target = url + (url.includes('?') ? '&' : '?') + '_nrm=' + Date.now();
+  // Стадия 1: обычный CORS-запрос. Сайты с ACAO отдают реальный статус — как в расширении.
+  const first = await timedFetch(target, { method: 'GET', cache: 'no-store', redirect: 'follow' }, timeoutMs);
+  if (first.res) {
+    const latency = first.ms;
+    const ok = first.res.status >= 200 && first.res.status < 500;
+    const result = { name, url, ok, status: first.res.status, latency, error: ok ? null : `${first.res.status}`, via: 'cors' };
     if (onComplete) onComplete(result);
+    return result;
   }
+  // Стадия 2: no-cors fallback (проверенная практика availability-замеров из браузера).
+  // Opaque-ответ резолвится только если DNS/TCP/TLS/HTTP прошли — сам факт = доступность.
+  // Статус/тело браузер скрывает, поэтому точность ниже: помечаем via/opaque.
+  const second = await timedFetch(target, getNoCorsInit(), timeoutMs);
+  const latency = second.ms;
+  let result;
+  if (second.res) {
+    result = { name, url, ok: true, status: null, latency, error: null, via: 'no-cors', opaque: true };
+  } else {
+    result = { name, url, ok: false, status: null, latency, error: netError(Date.now() - latency, timeoutMs, second.error), via: 'no-cors' };
+  }
+  if (onComplete) onComplete(result);
   return result;
+}
+
+// Различаем таймаут и быстрый сброс (DPI/RST режут иначе, чем тишина сети).
+export function netError(started, timeoutMs, e) {
+  if (e && e.name === 'AbortError') return 'Таймаут';
+  if (Date.now() - started >= timeoutMs - 60) return 'Таймаут';
+  return 'Сброс соединения';
+}
+
+// Проверяем init для no-cors заранее: конструктор Request валидирует опции синхронно.
+let noCorsInit = null;
+function getNoCorsInit() {
+  if (noCorsInit) return noCorsInit;
+  const full = { method: 'GET', cache: 'no-store', redirect: 'follow', mode: 'no-cors' };
+  try {
+    new Request('https://example.com/', full);
+    noCorsInit = full;
+  } catch {
+    noCorsInit = { mode: 'no-cors' };
+  }
+  return noCorsInit;
 }
 
 export function classify(groups) {
@@ -130,47 +155,73 @@ export async function dohQuery(provider, domain, timeoutMs) {
     try { json = await res.json(); } catch { return { ok: false, ms, error: 'Битый ответ' }; }
     const answers = (json.Answer || []).filter((a) => a.type === 1 && a.data).map((a) => a.data);
     return { ok: true, ms, answers, dnsStatus: (json.Status ?? null) };
-  } catch {
-    return { ok: false, ms: Date.now() - started, error: 'Ошибка сети' };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - started, error: netError(started, timeoutMs, e) };
   }
+}
+
+// Заглушечные/приватные IP в ответе = сильный признак подмены DNS.
+function isSuspiciousIp(ip) {
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip || '')) return false;
+  const [a, b] = ip.split('.').map(Number);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 127 || ip === '0.0.0.0';
 }
 
 export function buildDnsVerdict(dnsResults, domains) {
   const notes = [];
   const inconsistentDomains = [];
+  const hijackDomains = [];
   for (const domain of domains) {
     const answered = dnsResults.filter((r) => r.answers && r.answers[domain]);
-    if (answered.length < 2) continue;
-    const variants = new Map();
-    for (const r of answered) {
-      const key = [...r.answers[domain]].sort().join(',');
-      if (!variants.has(key)) variants.set(key, []);
-      variants.get(key).push(r.name);
+    const nonEmpty = answered.filter((r) => r.answers[domain].length > 0);
+    const empty = answered.filter((r) => r.answers[domain].length === 0);
+    if (answered.length === 0) continue;
+    // Пусто у части резолверов, IP у остальных — признак фильтрации.
+    if (empty.length > 0 && nonEmpty.length > 0) {
+      if (!inconsistentDomains.includes(domain)) inconsistentDomains.push(domain);
+      notes.push(`${domain}: ${empty.map((r) => r.name).join(', ')} отдают пусто (NXDOMAIN?), а ${nonEmpty.map((r) => r.name).join(', ')} отдают IP — возможна фильтрация DNS`);
     }
-    if (variants.size > 1) {
-      inconsistentDomains.push(domain);
-      const detail = [...variants.entries()].map(([ips, names]) => `${names.join('+')}: [${ips || 'пусто'}]`).join(' vs ');
-      notes.push(`${domain}: ответы резолверов различаются (${detail}) — возможна подмена/фильтрация DNS`);
+    if (nonEmpty.length >= 2) {
+      const variants = new Map();
+      for (const r of nonEmpty) {
+        const key = [...r.answers[domain]].sort().join(',');
+        if (!variants.has(key)) variants.set(key, []);
+        variants.get(key).push(r.name);
+      }
+      if (variants.size > 1) {
+        if (!inconsistentDomains.includes(domain)) inconsistentDomains.push(domain);
+        const detail = [...variants.entries()].map(([ips, names]) => `${names.join('+')}: [${ips || 'пусто'}]`).join(' vs ');
+        const allIps = [...variants.keys()].join(',').split(',').filter(Boolean);
+        const bad = [...new Set(allIps.filter(isSuspiciousIp))];
+        if (bad.length) {
+          hijackDomains.push(domain);
+          notes.push(`${domain}: ${detail} — ПРИЗНАКИ ПОДМЕНЫ DNS (заглушечный IP: ${bad.join(', ')})`);
+        } else {
+          // Disjoint-наборы у CDN/GeoDNS — норма (ротация, ECS), не приговор.
+          notes.push(`${domain}: ответы различаются (${detail}) — возможны GeoDNS/ротация CDN либо фильтрация`);
+        }
+      }
     }
   }
   for (const r of dnsResults.filter((r) => !r.ok)) {
     notes.push(`${r.name} (${r.target}): недоступен — возможно блокировка DoH или нет сети`);
   }
+  // Помечаем провайдеров, чей ответ отличается от большинства (по непустым ответам).
   for (const domain of domains) {
-    const answered = dnsResults.filter((r) => r.answers && r.answers[domain]);
-    if (!answered.length) continue;
+    const nonEmpty = dnsResults.filter((r) => r.answers && r.answers[domain] && r.answers[domain].length > 0);
+    if (!nonEmpty.length) continue;
     const counts = new Map();
-    for (const r of answered) {
+    for (const r of nonEmpty) {
       const key = [...r.answers[domain]].sort().join(',');
       counts.set(key, (counts.get(key) || 0) + 1);
     }
     let majority = null, best = -1;
     for (const [key, n] of counts) if (n > best) { best = n; majority = key; }
-    for (const r of answered) {
+    for (const r of nonEmpty) {
       if ([...r.answers[domain]].sort().join(',') !== majority) r.diff = true;
     }
   }
-  return { consistent: inconsistentDomains.length === 0, inconsistentDomains, notes };
+  return { consistent: inconsistentDomains.length === 0, inconsistentDomains, hijackDomains, notes };
 }
 
 export async function collectNetInfo(timeoutMs, providers, domains) {
@@ -184,14 +235,15 @@ export async function collectNetInfo(timeoutMs, providers, domains) {
   })();
   const dnsP = Promise.all(active.map(async (p) => {
     const answers = {};
+    const statuses = {};
     let ok = false, ms = null;
     for (const domain of domains) {
       const r = await dohQuery(p, domain, timeoutMs);
       if (ms === null) ms = r.ms;
-      if (r.ok) { ok = true; answers[domain] = r.answers; }
+      if (r.ok) { ok = true; answers[domain] = r.answers; statuses[domain] = r.dnsStatus; }
       else answers[domain] = null;
     }
-    return { id: p.id, name: p.name, target: p.target, ok, ms: ms ?? 0, answers, diff: false };
+    return { id: p.id, name: p.name, target: p.target, ok, ms: ms ?? 0, answers, statuses, diff: false };
   }));
   const [trace, dnsResults] = await Promise.all([traceP, dnsP]);
   const online = trace.ok || dnsResults.some((r) => r.ok);
