@@ -142,13 +142,13 @@ export default function App() {
           <div class="brand-dot"></div>
           <div>
             <div class="brand-title">Net Regime Monitor</div>
-            <div class="brand-sub">Веб-версия · работает офлайн</div>
+            <div class="brand-sub">Веб-версия · история офлайн</div>
           </div>
         </div>
         {!online && <div class="offline-banner">Нет сети — показаны сохранённые данные</div>}
-        <nav class="nav">
+        <nav class="nav" aria-label="Разделы монитора">
           {Object.keys(titles).map((k) => (
-            <button key={k} class={`nav-btn${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>
+            <button key={k} class={`nav-btn${tab === k ? ' active' : ''}`} aria-pressed={tab === k} onClick={() => setTab(k)}>
               {k === 'overview' ? 'Обзор' : k === 'history' ? 'Журнал пингов' : k === 'sites' ? 'Сайты' : k === 'dns' ? 'DNS' : 'Корреляции'}
             </button>
           ))}
@@ -164,8 +164,8 @@ export default function App() {
             Очистить историю
           </button>
           <div class="settings-row">
-            <div class="setting"><label>Интервал, мин</label><input type="number" min="1" max="60" value={settings.intervalMinutes} onChange={(e) => saveSettings({ intervalMinutes: Number(e.target.value) || 5 })} /></div>
-            <div class="setting"><label>Таймаут, сек</label><input type="number" min="1" max="60" value={settings.timeoutSeconds} onChange={(e) => saveSettings({ timeoutSeconds: Number(e.target.value) || 10 })} /></div>
+            <div class="setting"><label for="interval-minutes">Интервал, мин</label><input id="interval-minutes" type="number" min="1" max="60" value={settings.intervalMinutes} onChange={(e) => saveSettings({ intervalMinutes: Number(e.target.value) || 5 })} /></div>
+            <div class="setting"><label for="timeout-seconds">Таймаут, сек</label><input id="timeout-seconds" type="number" min="1" max="60" value={settings.timeoutSeconds} onChange={(e) => saveSettings({ timeoutSeconds: Number(e.target.value) || 10 })} /></div>
           </div>
           <div class="foot-note">{history.length}/500 проверок · офлайн-режим через кеш</div>
         </div>
@@ -174,7 +174,7 @@ export default function App() {
       <main class="main">
         <header class="topbar">
           <div>
-            <h1>{privacy ? 'Конфиденциальность' : titles[tab]}</h1>
+            <h2>{privacy ? 'Конфиденциальность' : titles[tab]}</h2>
             {!privacy && <div class="sub">{display ? `Последняя проверка: ${fmtTime(display.at)} · интервал ${display.intervalMinutes} мин` : 'Ещё не проверялось — нажмите «Проверить сейчас»'}</div>}
           </div>
           <div class="top-actions">
@@ -203,10 +203,12 @@ export default function App() {
           </>)}
 
         <footer class="site-footer">
+          <a class="btn" href="https://chromewebstore.google.com/detail/net-regime-monitor/cojjfgjbmgffncneocidkmdnpkajhgjj">Chrome Web Store</a>
+          <a class="foot-link" href="https://products.tregor.workers.dev/">Другие продукты</a>
           <a class="btn" href="/extension.zip" download>Установить расширение (.zip)</a>
           <button class="btn" onClick={installPwa}>{pwaReady ? 'Установить приложение (PWA)' : 'Как установить приложение'}</button>
           <a class="foot-link" href={PRIVACY_HASH}>Конфиденциальность</a>
-          <span class="hint">Net Regime Monitor · работает офлайн</span>
+          <span class="hint">Net Regime Monitor · история офлайн</span><a class="foot-link" href="https://products.tregor.workers.dev/about/">Автор: Egor Davydov</a>
         </footer>
       </main>
     </div>
@@ -266,7 +268,7 @@ function Overview({ ordered, history, display, netInfo, state }) {
   return (
     <section class="tab active">
       <div class="card">
-        <div class="card-head"><h3>Текущее соединение: IP → DNS</h3>
+        <div class="card-head"><h3>Текущее соединение: IP и DNS</h3>
           <span class="badge" style={ni ? `background:${ni.online ? '#10b981' : '#ef4444'};color:#fff` : ''}>
             {ni ? (ni.online ? 'ONLINE' : 'OFFLINE') : 'Сбор…'}
           </span>
@@ -275,7 +277,7 @@ function Overview({ ordered, history, display, netInfo, state }) {
           ? <span class="hint">Нет данных — нажмите «Проверить сейчас». Без интернета покажем последние сохранённые.</span>
           : <div class="net-grid">
             <div class="net-item"><div class="label">Внешний IP</div><div class="val">{ni.publicIp || '—'}</div><div class="sub">{[ni.loc, ni.colo].filter(Boolean).join(' · ') || 'локация неизвестна'}</div></div>
-            <div class="net-item"><div class="label">До Cloudflare (trace)</div><div class={`val ${ni.traceMs != null ? 'ok' : 'bad'}`}>{ni.traceMs != null ? ni.traceMs + ' мс' : 'недоступно'}</div><div class="sub">IP → CDN edge</div></div>
+            <div class="net-item"><div class="label">До Cloudflare (trace)</div><div class={`val ${ni.traceMs != null ? 'ok' : 'bad'}`}>{ni.traceMs != null ? ni.traceMs + ' мс' : 'недоступно'}</div><div class="sub">IP и CDN edge</div></div>
             {(ni.dns || []).map((d) => (
               <div class="net-item" key={d.id}><div class="label">{d.name}</div>
                 <div class={`val ${d.ok ? 'ok' : 'bad'}`}>{(d.ok ? d.ms + ' мс' : 'FAIL') + (d.diff ? ' ⚠' : '')}</div>

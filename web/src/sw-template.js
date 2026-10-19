@@ -23,12 +23,15 @@ self.addEventListener('fetch', (event) => {
   // Замеры доступности и DNS всегда идут в сеть напрямую, в кеш не кладём.
   if (url.origin !== self.location.origin) return;
   if (request.mode === 'navigate') {
+    if (url.pathname !== '/' && url.pathname !== '/index.html') return;
     // Страница: сеть, при отсутствии — кешированный шелл (офлайн).
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((cache) => cache.put('/index.html', copy)).catch(() => {});
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put('/index.html', copy)).catch(() => {});
+          }
           return res;
         })
         .catch(() => caches.match('/index.html', { ignoreSearch: true })),

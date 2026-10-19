@@ -82,7 +82,8 @@ export function drawStateDist(canvas, counts, total) {
   if (!canvas) return;
   const ctx = clearCanvas(canvas);
   const W = canvas.width, H = canvas.height;
-  const t = total || Object.values(counts).reduce((s, v) => s + v, 0) || 1;
+  const count = total ?? Object.values(counts).reduce((s, v) => s + v, 0);
+  const t = count || 1; // denominator only; never display an invented check
   const y = H / 2, r = Math.min(90, H * 0.35);
   let start = -Math.PI / 2;
   for (const [code, cnt] of Object.entries(counts)) {
@@ -93,7 +94,7 @@ export function drawStateDist(canvas, counts, total) {
   }
   ctx.fillStyle = '#0b1222'; ctx.beginPath(); ctx.arc(W * 0.32, y, r * 0.55, 0, 2 * Math.PI); ctx.fill();
   ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 14px system-ui'; ctx.textAlign = 'center';
-  ctx.fillText(t + ' проверок', W * 0.32, y + 4);
+  ctx.fillText(count + ' проверок', W * 0.32, y + 4);
 }
 
 export function drawHeatmap(canvas, ordered) {

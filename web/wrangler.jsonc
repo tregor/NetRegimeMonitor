@@ -4,7 +4,7 @@
   "compatibility_date": "2026-10-07",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "404-page"
   },
   "routes": [{ "pattern": "net-regime-monitor.therephrase.com/*", "zone_name": "therephrase.com" }]
 }

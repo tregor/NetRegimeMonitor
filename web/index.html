@@ -4,13 +4,36 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="Net Regime Monitor — проверка доступности сайтов и DNS. Работает офлайн." />
+  <meta name="description" content="Проверяйте доступность сайтов, сравнивайте DNS-серверы и историю соединения в браузере. Net Regime Monitor — веб-приложение и расширение Chrome." />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/png" href="/icon128.png" />
-  <title>Net Regime Monitor — веб-версия</title>
+  <title>Net Regime Monitor — проверка доступности сайтов и DNS</title>
+  <link rel="canonical" href="https://net-regime-monitor.therephrase.com/" />
+  <meta property="og:title" content="Net Regime Monitor — проверка сети и DNS" />
+  <meta property="og:description" content="Доступность сайтов, история проверок и сравнение DNS-серверов в браузере." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://net-regime-monitor.therephrase.com/" />
+  <meta property="og:image" content="https://net-regime-monitor.therephrase.com/icon128.png" />
+  <meta name="twitter:card" content="summary" />
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebSite", "@id": "https://net-regime-monitor.therephrase.com/#website", "url": "https://net-regime-monitor.therephrase.com/", "name": "Net Regime Monitor", "inLanguage": "ru"}, {"@type": "Person", "@id": "https://products.tregor.workers.dev/about/#person", "name": "Egor Davydov", "url": "https://products.tregor.workers.dev/about/"}, {"@type": "WebPage", "@id": "https://net-regime-monitor.therephrase.com/#webpage", "url": "https://net-regime-monitor.therephrase.com/", "name": "Net Regime Monitor — проверка доступности сайтов и DNS", "inLanguage": "ru", "isPartOf": {"@id": "https://net-regime-monitor.therephrase.com/#website"}, "mainEntity": {"@id": "https://net-regime-monitor.therephrase.com/#application"}}, {"@type": "SoftwareApplication", "@id": "https://net-regime-monitor.therephrase.com/#application", "name": "Net Regime Monitor", "url": "https://net-regime-monitor.therephrase.com/", "applicationCategory": "UtilitiesApplication", "description": "Проверка доступности сайтов, сравнение DNS-серверов и локальная история соединения в браузере.", "creator": {"@id": "https://products.tregor.workers.dev/about/#person"}, "screenshot": "https://net-regime-monitor.therephrase.com/extension-popup.webp", "installUrl": "https://chromewebstore.google.com/detail/net-regime-monitor/cojjfgjbmgffncneocidkmdnpkajhgjj", "mainEntityOfPage": {"@id": "https://net-regime-monitor.therephrase.com/#webpage"}}]}</script>
 </head>
 <body>
-  <div id="root"></div>
+  <a class="skip-link" href="#monitor">Перейти к монитору</a>
+  <header class="product-intro" aria-labelledby="product-title">
+    <nav class="product-nav" aria-label="О проекте"><a class="product-wordmark" href="/">NRM<span> / Network observatory</span></a><a href="https://products.tregor.workers.dev/">Все проекты <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a></nav>
+    <div class="intro-grid"><div class="intro-copy">
+      <p class="eyebrow">Наблюдайте за сетью</p>
+      <h1 id="product-title">Сайт не открывается.<br><span>Что происходит с сетью?</span></h1>
+      <p class="intro-lead">Net Regime Monitor проверяет доступность сайтов, сравнивает DNS-серверы и сохраняет историю соединения в браузере.</p>
+      <div class="intro-actions"><a class="btn primary" href="#monitor">Открыть монитор <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="vertical-align:middle"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></a><a class="btn" href="https://chromewebstore.google.com/detail/net-regime-monitor/cojjfgjbmgffncneocidkmdnpkajhgjj">Установить расширение Chrome</a></div>
+      <p class="intro-note">Сохранённая история доступна офлайн. Новые проверки требуют сети.</p>
+      <div class="signal-strip" aria-label="Проверяемые группы"><span><i class="signal-dot ru" aria-hidden="true"></i>Российские сервисы</span><span><i class="signal-dot global" aria-hidden="true"></i>Зарубежные сервисы</span><span><i class="signal-dot restricted" aria-hidden="true"></i>Ограниченные ресурсы</span></div>
+    </div><figure class="extension-preview"><img src="/extension-popup.webp" width="400" height="905" alt="Окно расширения Net Regime Monitor: статус сети, соединение, проверка и настройки" fetchpriority="high"></figure></div>
+    <section class="mode-guide" aria-labelledby="mode-title"><div><p class="eyebrow">Как читать результат</p><h2 id="mode-title">Наблюдения, а не догадки</h2><p>Режим определяется ответами контрольных групп. Одна проверка не устанавливает причину сбоя и не заменяет диагностику провайдера.</p></div><div class="mode-grid"><div class="mode-item"><i class="signal-dot global" aria-hidden="true"></i><strong>Свободный доступ</strong><span>Отвечают все три группы.</span></div><div class="mode-item"><i class="signal-dot restricted" aria-hidden="true"></i><strong>Селективная блокировка</strong><span>Российские и зарубежные сервисы доступны, ограниченная группа — нет.</span></div><div class="mode-item"><i class="signal-dot warn" aria-hidden="true"></i><strong>Ограничения</strong><span>Российская группа отвечает, зарубежная — нет.</span></div><div class="mode-item"><i class="signal-dot bad" aria-hidden="true"></i><strong>Сбой или таймауты</strong><span>Нет ответов. Проверьте подключение и повторите замер.</span></div></div></section>
+    <noscript><p>Для интерактивных проверок включите JavaScript или установите расширение Chrome.</p></noscript>
+  </header>
+  <div id="monitor"><div id="root"></div></div>
+  <section class="post-monitor" aria-labelledby="questions-title"><p class="eyebrow">Перед первой проверкой</p><h2 id="questions-title">Что происходит под капотом</h2><details><summary>Как определяется режим сети?</summary><p>Монитор опрашивает три контрольные группы и сравнивает, какие из них отвечают. Это наблюдение из вашего браузера: на результат могут влиять сеть, ограничения браузера и доступность самих сервисов. Повторите замер и сравните историю, прежде чем делать выводы.</p></details><details><summary>Что сохраняется офлайн?</summary><p>История веб-версии хранится локально в браузере — до 500 проверок. Сохранённые результаты можно посмотреть без сети после кеширования приложения. Новые проверки и сравнение DNS требуют соединения.</p></details><details><summary>Можно ли заменить DNS прямо здесь?</summary><p>Вкладка DNS сравнивает ответы доступных DNS-over-HTTPS-серверов. Она не меняет системный DNS и не обходит ограничения сети автоматически.</p></details><details><summary>Чем отличается расширение?</summary><p>Расширение добавляет окно статуса и настройки мониторинга в Chrome. Его интерфейс показан выше. Веб-версия открывается в браузере; её история хранится отдельно от расширения.</p></details><div class="intro-actions"><a class="btn primary" href="https://chromewebstore.google.com/detail/net-regime-monitor/cojjfgjbmgffncneocidkmdnpkajhgjj">Открыть Chrome Web Store</a><a class="btn" href="#monitor">Проверить сеть в браузере</a></div><p>Автор проекта — <a href="https://products.tregor.workers.dev/about/">Egor Davydov</a>.</p></section>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
